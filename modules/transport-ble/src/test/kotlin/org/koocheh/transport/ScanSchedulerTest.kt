@@ -38,8 +38,8 @@ class ScanSchedulerTest {
 
     @Test fun minutesToNextEdge() {
         assertEquals(30, morning.minutesToNextEdge(7 * 60))
-        assertEquals(1440, TimeWindow(0, 0).minutesToNextEdge(5).let { 1440 })
-        assertEquals(90, morning.minutesToNextEdge(7 * 60 + 30).let { 90 })
+        assertEquals(90, morning.minutesToNextEdge(7 * 60 + 30))
+        assertEquals(1440, TimeWindow(600, 600).minutesToNextEdge(600))
     }
 
     @Test fun commuteScansOnlyInsideWindows() {
