@@ -158,3 +158,40 @@ abstract class PsiContractTest {
         }
     }
 }
+
+/** Runs the contract against the insecure fake, plus a control proving the leak check bites. */
+class FakePsiEngineContractTest : PsiContractTest() {
+    override fun engine(): PsiEngine = FakePsiEngine()
+
+    /** Deliberately leaky engine: sends tags in plaintext. Used only as a negative control. */
+    private class PlaintextLeakySession(private val local: Set<InterestTag>) : PsiSession {
+        override var result: PsiResult? = null
+            private set
+        private var sent = false
+
+        override fun outgoing(): ByteArray {
+            if (sent) return ByteArray(0)
+            sent = true
+            return local.joinToString("\n") { it.value }.toByteArray(Charsets.UTF_8)
+        }
+
+        override fun incoming(msg: ByteArray) {
+            val remote = String(msg, Charsets.UTF_8).split("\n").toSet()
+            val shared = local.filter { it.value in remote }.toSet()
+            result = PsiResult(shared.size, shared)
+        }
+    }
+
+    @Test
+    fun leakCheckDetectsAPlaintextEngine() {
+        val a = tags("photography", "chess-club")
+        val b = tags("photography", "gardening")
+        val sa = PlaintextLeakySession(a)
+        val sb = PlaintextLeakySession(b)
+        val ma = sa.outgoing()
+        val mb = sb.outgoing()
+        sa.incoming(mb)
+        sb.incoming(ma)
+        assertTrue(leaksTags(listOf(ma, mb), a + b))
+    }
+}
