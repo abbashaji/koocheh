@@ -1,0 +1,40 @@
+id: C-004
+title: core-crypto ephemeral IDs, commitments, signing, sessions
+after:
+  - C-003
+goal: |
+  Create module modules/core-crypto (Kotlin, libsodium via the lazysodium binding from the catalog). Package org.koocheh.crypto. Do not implement primitives yourself; wrap libsodium. Put pure logic (epoch math, rotation windows) behind small interfaces so it is unit-testable on the JVM without the native library.
+  - ContextSecretSource { secret(context): ByteArray } 32 bytes. Implemented later by the storage KeyVault; this cell only defines the interface.
+  - EphemeralIdProvider: current(context, nowMs) returns an EphemeralId derived from HKDF(secret(context), epoch). Epoch length is 10 to 15 minutes, chosen per context from the secret so rotation instants are not a fixed grid. Work and Social must produce unrelated ids. nextRotationAtMs(context, nowMs) tells the transport when to re-advertise.
+  - Commitments: commit(value) returns (commitment, nonce); verify(commitment, nonce, value). Used for commit-then-reveal tiers.
+  - Signer: Ed25519 newKeypair, sign, verify. Used for invite tokens.
+  - SecureSessionFactory and SecureSession: forward-secret session between two matched phones (ephemeral X25519 handshake, then a per-message symmetric key ratchet). Interface: factory.start(role, ownStatic, peerStaticPublic) returns a HandshakeState (produce/consume handshake messages, then session()); SecureSession.encrypt/decrypt. Add a code comment [UNVERIFIED] on the exact handshake construction; it needs the independent audit before the pilot.
+  Tests: rotation stays within 10..15 min, ids differ across contexts and epochs, no byte position is constant across 1000 epochs, commitment binding and hiding basics. Global rules: no network code; never log secrets, ids or tags.
+allowed_paths:
+  - modules/core-crypto/**
+inputs:
+  - from: C-003
+    kind: implementation
+    contract: |
+      Use org.koocheh.model ContextId, EphemeralId(bytes), Clock. EphemeralId has content equality and a redacted toString.
+outputs:
+  - modules/core-crypto/build.gradle.kts
+  - modules/core-crypto/src/main/kotlin/org/koocheh/crypto/ContextSecretSource.kt
+  - modules/core-crypto/src/main/kotlin/org/koocheh/crypto/EphemeralIds.kt
+  - modules/core-crypto/src/main/kotlin/org/koocheh/crypto/Commitments.kt
+  - modules/core-crypto/src/main/kotlin/org/koocheh/crypto/Signer.kt
+  - modules/core-crypto/src/main/kotlin/org/koocheh/crypto/SecureSession.kt
+  - modules/core-crypto/src/test/kotlin/org/koocheh/crypto/EphemeralIdsTest.kt
+  - modules/core-crypto/src/test/kotlin/org/koocheh/crypto/CommitmentsTest.kt
+provides:
+  - 'org.koocheh.crypto.ContextSecretSource { fun secret(context: ContextId): ByteArray } 32 bytes, implemented by storage KeyVault'
+  - 'org.koocheh.crypto.EphemeralIdProvider { fun current(context: ContextId, nowMs: Long): EphemeralId; fun nextRotationAtMs(context: ContextId, nowMs: Long): Long }'
+  - 'org.koocheh.crypto.Commitments { fun commit(value: ByteArray): Commit(commitment, nonce); fun verify(commitment: ByteArray, nonce: ByteArray, value: ByteArray): Boolean }'
+  - 'org.koocheh.crypto.Signer { fun newKeypair(): KeyPair; fun sign(secretKey: ByteArray, message: ByteArray): ByteArray; fun verify(publicKey: ByteArray, message: ByteArray, signature: ByteArray): Boolean }'
+  - 'org.koocheh.crypto.SecureSessionFactory { fun start(role: Role, ownStatic: KeyPair, peerStaticPublic: ByteArray?): HandshakeState } with HandshakeState { fun next(incoming: ByteArray?): ByteArray?; fun session(): SecureSession? }'
+  - 'org.koocheh.crypto.SecureSession { fun encrypt(plain: ByteArray): ByteArray; fun decrypt(cipher: ByteArray): ByteArray } forward secret'
+acceptance:
+  - cmd: test -f modules/core-crypto/build.gradle.kts
+  - cmd: grep -q EphemeralIdProvider modules/core-crypto/src/main/kotlin/org/koocheh/crypto/EphemeralIds.kt
+  - cmd: grep -q ContextSecretSource modules/core-crypto/src/main/kotlin/org/koocheh/crypto/ContextSecretSource.kt
+  - cmd: grep -q SecureSession modules/core-crypto/src/main/kotlin/org/koocheh/crypto/SecureSession.kt

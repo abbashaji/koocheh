@@ -1,0 +1,76 @@
+id: C-017
+title: integration wiring and two-peer end-to-end tests
+type: integration
+after:
+  - C-018
+goal: |
+  Wire the real modules into the app and prove the pieces work together. Package org.koocheh.
+  - app/build.gradle.kts: add project dependencies on every module under modules/ that now exists (core-model, core-crypto, core-psi, storage, transport-ble, disclosure, familiar, security, invites, chat, pilot) and apply ../gradle/reproducible.gradle.kts.
+  - ServiceLocator.kt: replace each NotWiredYet provider with the real implementation: KeyVault as ContextSecretSource for EphemeralIdProvider, DiscoveryService advertising the current id and re-advertising at nextRotationAtMs, DisclosureEngine over PeerLink channels with the PSI engine from core-psi, FamiliarTracker fed from completed Tier 0 matches, ChatService, PanicWipe. If no real PSI library has been chosen (see modules/core-psi/LIBRARY_EVALUATION.md), the locator must fail closed with a clear error in release builds and use FakePsiEngine only in debug and test builds.
+  - Tests (JVM, no devices): TwoPeerFlowTest runs two full stacks over an in-memory FakeRadioLink through Tiers 0 to 4, checking nothing is revealed one-sidedly and that withdrawal at each tier deletes the data; ContextIsolationTest checks Work and Social ids and stores share nothing; WipeAndDecoyTest checks the real PIN, decoy PIN and wipe PIN outcomes and that after wipe the stores are unreadable.
+  Fix interface mismatches by adapting in ServiceLocator, not by editing module code; if a contract is wrong, use cell_signal feedback.
+allowed_paths:
+  - app/build.gradle.kts
+  - app/src/main/kotlin/org/koocheh/ServiceLocator.kt
+  - app/src/test/kotlin/org/koocheh/integration/**
+inputs:
+  - from: C-004
+    kind: implementation
+    contract: |
+      org.koocheh.crypto EphemeralIdProvider, Commitments, Signer, SecureSessionFactory, SecureSession, ContextSecretSource.
+  - from: C-005
+    kind: implementation
+    contract: |
+      org.koocheh.psi PsiEngine, PsiSession, RevealLevel, FakePsiEngine in testFixtures.
+  - from: C-006
+    kind: implementation
+    contract: |
+      org.koocheh.storage KeyVault, UnlockResult, SecureStore, ContextStore.
+  - from: C-007
+    kind: implementation
+    contract: |
+      org.koocheh.transport DiscoveryService, PeerLink, PeerChannel.
+  - from: C-008
+    kind: implementation
+    contract: |
+      org.koocheh.disclosure DisclosureEngine, DisclosureSession, TierState.
+  - from: C-009
+    kind: implementation
+    contract: |
+      org.koocheh.familiar FamiliarTracker, EncounterLinker.
+  - from: C-010
+    kind: implementation
+    contract: |
+      org.koocheh.security DecoyGate, PanicWipe, SecureWindowPolicy, NotificationPolicy, PhotoSanitizer.
+  - from: C-011
+    kind: implementation
+    contract: |
+      org.koocheh.invites InviteIssuer, InviteVerifier, QrCodec.
+  - from: C-012
+    kind: implementation
+    contract: |
+      org.koocheh.chat ChatService.
+  - from: C-014
+    kind: implementation
+    contract: |
+      UI screens for onboarding, lock, profile and settings exist under org.koocheh.ui.
+  - from: C-015
+    kind: implementation
+    contract: |
+      UI screens for signals, disclosure, chat and AppNavHost exist under org.koocheh.ui.
+  - from: C-016
+    kind: implementation
+    contract: |
+      org.koocheh.pilot PilotRecorder, PilotExporter, ExperimentFlags.
+outputs:
+  - app/build.gradle.kts
+  - app/src/main/kotlin/org/koocheh/ServiceLocator.kt
+  - app/src/test/kotlin/org/koocheh/integration/FakeRadioLink.kt
+  - app/src/test/kotlin/org/koocheh/integration/TwoPeerFlowTest.kt
+  - app/src/test/kotlin/org/koocheh/integration/ContextIsolationTest.kt
+  - app/src/test/kotlin/org/koocheh/integration/WipeAndDecoyTest.kt
+acceptance:
+  - cmd: test -f app/src/test/kotlin/org/koocheh/integration/TwoPeerFlowTest.kt
+  - cmd: grep -q modules/disclosure app/build.gradle.kts
+  - cmd: grep -q reproducible app/build.gradle.kts
+  - cmd: sh -c '! grep -q NotWiredYet app/src/main/kotlin/org/koocheh/ServiceLocator.kt'

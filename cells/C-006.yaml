@@ -1,0 +1,41 @@
+id: C-006
+title: storage encrypted local store and key vault
+after:
+  - C-003
+goal: |
+  Create module modules/storage (Android library, Kotlin). Package org.koocheh.storage. Everything the app persists lives here, encrypted, per context.
+  - KeyVault implements the ContextSecretSource contract (C-004). Master key in Android Keystore, additionally wrapped by a key derived from the user PIN (PinKdf, memory-hard KDF via libsodium from the catalog; no hand-rolled KDF). Per-context 32-byte secrets are derived from the vault so Work and Social share nothing.
+  - unlock(pin: CharArray): UnlockResult { REAL, DECOY, WIPED, WRONG }. A second enrolled PIN (enrollDecoyPin) opens a separate empty decoy namespace that behaves like a real store; a third enrolled PIN (enrollWipePin) calls destroyAll(). destroyAll() destroys keys and data irrecoverably (overwrite wrapped keys, delete Keystore entry, delete database files). lock() zeroes in-memory keys.
+  - SecureStore: Room plus SQLCipher database, one logical store per context and per namespace (real or decoy). Every query is scoped by ContextId; there is no cross-context query.
+  - RetentionPolicy: familiar-stranger encounter counts older than 14 days are deleted; expired chat messages are deleted; purgeExpired(nowMs) does both.
+  - No cloud backup: provide a backup rules XML fragment content in a comment for the app shell, and never write outside app-private storage.
+  Tests: KeyVault unlock results for real, decoy, wipe and wrong PIN; RetentionPolicy boundaries (13 vs 15 days). Add a code comment [UNVERIFIED] on SQLCipher and Keystore behaviour that was not run on a device. Global rules: no network code; never log PINs, keys or tags.
+allowed_paths:
+  - modules/storage/**
+inputs:
+  - from: C-003
+    kind: implementation
+    contract: |
+      Use org.koocheh.model ContextId, DisclosureTier, Clock.
+  - from: C-004
+    kind: contract
+    contract: |
+      Implement org.koocheh.crypto.ContextSecretSource { fun secret(context: ContextId): ByteArray } returning 32 bytes. Code against it with a local copy of the interface in tests; do not read C-004.
+outputs:
+  - modules/storage/build.gradle.kts
+  - modules/storage/src/main/kotlin/org/koocheh/storage/KeyVault.kt
+  - modules/storage/src/main/kotlin/org/koocheh/storage/PinKdf.kt
+  - modules/storage/src/main/kotlin/org/koocheh/storage/SecureStore.kt
+  - modules/storage/src/main/kotlin/org/koocheh/storage/ContextStore.kt
+  - modules/storage/src/main/kotlin/org/koocheh/storage/RetentionPolicy.kt
+  - modules/storage/src/test/kotlin/org/koocheh/storage/KeyVaultTest.kt
+  - modules/storage/src/test/kotlin/org/koocheh/storage/RetentionPolicyTest.kt
+provides:
+  - 'org.koocheh.storage.KeyVault : ContextSecretSource { fun unlock(pin: CharArray): UnlockResult; fun lock(); fun enrollDecoyPin(pin: CharArray); fun enrollWipePin(pin: CharArray); fun destroyAll() irrecoverable }'
+  - 'org.koocheh.storage.UnlockResult { REAL, DECOY, WIPED, WRONG }'
+  - 'org.koocheh.storage.SecureStore { fun forContext(context: ContextId): ContextStore }'
+  - 'org.koocheh.storage.ContextStore { suspend fun putPeerRecord(peerKey: String, tier: DisclosureTier, payload: ByteArray); suspend fun getPeerRecord(peerKey: String): PeerRecord?; suspend fun deletePeer(peerKey: String) removes everything exchanged; suspend fun incrementEncounter(linkKey: ByteArray, day: Int); suspend fun encountersFor(linkKey: ByteArray, sinceDay: Int): List<Int>; suspend fun putMessage(peerKey: String, expiresAtMs: Long, cipher: ByteArray); suspend fun messages(peerKey: String): List<StoredMessage>; suspend fun purgeExpired(nowMs: Long) }'
+acceptance:
+  - cmd: test -f modules/storage/src/main/kotlin/org/koocheh/storage/KeyVault.kt
+  - cmd: grep -q UnlockResult modules/storage/src/main/kotlin/org/koocheh/storage/KeyVault.kt
+  - cmd: grep -q purgeExpired modules/storage/src/main/kotlin/org/koocheh/storage/ContextStore.kt

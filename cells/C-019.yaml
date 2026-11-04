@@ -1,0 +1,20 @@
+id: C-019
+title: security audit brief and Bluetooth tracking test plan
+goal: |
+  Spec section 7 requires an independent security audit and a Bluetooth tracking test before any pilot, because existing mesh messaging apps have had flaws that made users trackable [UNVERIFIED on specifics]. This cell prepares the documents for those; it does not perform them and must not claim any result.
+  - docs/security/audit-brief.md: scope for an external auditor: key management and PIN wrapping, ephemeral id derivation, commit-then-reveal, the forward-secret session construction, PSI integration, invite tokens, decoy and wipe behaviour, the Android manifest and permissions. List the modules (core-crypto, core-psi, storage, security, invites, disclosure, chat, transport-ble) and the question to answer for each. State the pass criterion from the pilot gate: no unresolved critical findings.
+  - docs/security/tracking-test-plan.md: a plan to test whether a passive observer can follow a phone: advertisement payload stability across rotations, alignment of Bluetooth address rotation with ephemeral id rotation, the fixed service UUID as a fingerprint, scan response and GATT characteristic constants, RSSI and timing correlation across a rotation boundary, Work versus Social context unlinkability. For each check give method, tool class needed, and pass or fail condition. Pass gate: zero confirmed identifier-tracking failures. State that passing shows only the absence of the failures tested for.
+  - docs/security/pilot-risk-briefing.md: the explicit risk briefing for informed consent in plain language, including that the app cannot remove legal and social consequences, entrapment and infiltration are unsolved, and compelled unlock is not defended against.
+  - docs/security/gate-checklist.md: the five go/no-go gates for v1.5 with an owner field and a status field left blank: audit passed, battery under limit (limit to be set by the team), a cluster dense enough for a weekly signal, zero identifier-tracking failures, no participant harm reported.
+allowed_paths:
+  - docs/security/**
+outputs:
+  - docs/security/audit-brief.md
+  - docs/security/tracking-test-plan.md
+  - docs/security/pilot-risk-briefing.md
+  - docs/security/gate-checklist.md
+acceptance:
+  - cmd: test -f docs/security/audit-brief.md
+  - cmd: grep -qi rotation docs/security/tracking-test-plan.md
+  - cmd: grep -qi entrapment docs/security/pilot-risk-briefing.md
+  - cmd: grep -qi gate docs/security/gate-checklist.md

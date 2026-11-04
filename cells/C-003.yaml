@@ -1,0 +1,35 @@
+id: C-003
+title: core-model shared types
+type: skeleton
+lease_minutes: 15
+after:
+  - C-001
+goal: |
+  Create Gradle module modules/core-model (pure Kotlin/JVM library, no Android dependency) with the shared domain types every other module codes against. Package org.koocheh.model. Keep it small and dependency-free except kotlinx-serialization from the catalog.
+  Types: ContextId { WORK, SOCIAL }; AgeRange (enum of coarse ranges, e.g. R18_24, R25_34, R35_44, R45_PLUS); InterestTag(value) normalised lowercase and trimmed, 1..32 chars; Profile(context, nickname, ageRange, tags max 10, line max 140 chars, photo ByteArray? default null) with validate() returning a list of violations; DisclosureTier { T0_SIGNAL, T1_HELLO, T2_BIO, T3_PHOTO, T4_CHAT }; ScanMode { PASSIVE, NORMAL, COMMUTE }; EphemeralId(bytes) with content equality and a toString that never prints the bytes; Sighting(ephemeralId, rssiDbm, seenAtElapsedMs) which is never persisted; Clock { nowMs(), elapsedMs() } with a system implementation and a settable fake for tests.
+  Rules: Work and Social contexts share no identifiers, so no type may hold a cross-context id. Global rules: Kotlin; no network code; never log identifiers or tags.
+allowed_paths:
+  - modules/core-model/**
+outputs:
+  - modules/core-model/build.gradle.kts
+  - modules/core-model/src/main/kotlin/org/koocheh/model/Context.kt
+  - modules/core-model/src/main/kotlin/org/koocheh/model/Profile.kt
+  - modules/core-model/src/main/kotlin/org/koocheh/model/Disclosure.kt
+  - modules/core-model/src/main/kotlin/org/koocheh/model/Ids.kt
+  - modules/core-model/src/main/kotlin/org/koocheh/model/Clock.kt
+  - modules/core-model/src/test/kotlin/org/koocheh/model/ProfileValidationTest.kt
+provides:
+  - 'org.koocheh.model.ContextId { WORK, SOCIAL }'
+  - 'org.koocheh.model.InterestTag(value: String) normalised lowercase, 1..32 chars'
+  - 'org.koocheh.model.AgeRange enum'
+  - 'org.koocheh.model.Profile(context, nickname, ageRange, tags: List<InterestTag> max 10, line: String max 140, photo: ByteArray? = null) with validate(): List<String>'
+  - 'org.koocheh.model.DisclosureTier { T0_SIGNAL, T1_HELLO, T2_BIO, T3_PHOTO, T4_CHAT }'
+  - 'org.koocheh.model.ScanMode { PASSIVE, NORMAL, COMMUTE }'
+  - 'org.koocheh.model.EphemeralId(bytes: ByteArray) content equality, redacted toString'
+  - 'org.koocheh.model.Sighting(ephemeralId: EphemeralId, rssiDbm: Int, seenAtElapsedMs: Long) never persisted'
+  - 'org.koocheh.model.Clock { fun nowMs(): Long; fun elapsedMs(): Long }'
+acceptance:
+  - cmd: test -f modules/core-model/build.gradle.kts
+  - cmd: grep -q 'enum class ContextId' modules/core-model/src/main/kotlin/org/koocheh/model/Context.kt
+  - cmd: grep -q DisclosureTier modules/core-model/src/main/kotlin/org/koocheh/model/Disclosure.kt
+  - cmd: grep -q EphemeralId modules/core-model/src/main/kotlin/org/koocheh/model/Ids.kt

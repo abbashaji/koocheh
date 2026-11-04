@@ -1,0 +1,38 @@
+id: C-007
+title: transport-ble discovery and GATT exchange
+after:
+  - C-003
+goal: |
+  Create module modules/transport-ble (Android library, Kotlin). Package org.koocheh.transport.
+  - BleAdvertiser: advertise one EphemeralId at a time under a fixed app service UUID constant that lives in one place and is flagged in a comment as a fingerprinting surface for the tracking test. Payload fits legacy advertising limits. If both contexts are enabled, alternate their ids with randomised dwell; never advertise both at once. Re-advertise when told the id rotated.
+  - BleScanner and ScanScheduler: duty-cycled scanning. Modes from ScanMode: PASSIVE scans only while the app is in the foreground; NORMAL scans periodically; COMMUTE scans only inside user-selected time windows (list of start/end minutes of day). Emit Sighting(ephemeralId, rssiDbm, seenAtElapsedMs) on a Flow. Sightings are never persisted here.
+  - RadioCapabilities: detect BLE Coded PHY support (supportsCodedPhy()); use Coded PHY only when both phones support it. Expected indoor range is far below datasheet figures [UNVERIFIED] and is measured in the pilot, so RangeLog keeps an in-memory ring buffer of (rssi, user-entered distance bucket) samples that the pilot module can export on request.
+  - GattExchange: small request/response exchanges, max 4 KB per exchange, chunked to the negotiated MTU, with timeouts. API is PeerLink.open(sighting): PeerChannel with send/receive/close.
+  - ScanSchedulerTest: window maths for COMMUTE, mode transitions. Note in a comment that Android BLE address rotation may not align with ephemeral id rotation [UNVERIFIED]; the tracking test must check it.
+  Global rules: no network code; never log ids.
+allowed_paths:
+  - modules/transport-ble/**
+inputs:
+  - from: C-003
+    kind: implementation
+    contract: |
+      Use org.koocheh.model EphemeralId, Sighting, ScanMode, Clock.
+outputs:
+  - modules/transport-ble/build.gradle.kts
+  - modules/transport-ble/src/main/kotlin/org/koocheh/transport/BleAdvertiser.kt
+  - modules/transport-ble/src/main/kotlin/org/koocheh/transport/BleScanner.kt
+  - modules/transport-ble/src/main/kotlin/org/koocheh/transport/ScanScheduler.kt
+  - modules/transport-ble/src/main/kotlin/org/koocheh/transport/GattExchange.kt
+  - modules/transport-ble/src/main/kotlin/org/koocheh/transport/RadioCapabilities.kt
+  - modules/transport-ble/src/main/kotlin/org/koocheh/transport/RangeLog.kt
+  - modules/transport-ble/src/test/kotlin/org/koocheh/transport/ScanSchedulerTest.kt
+provides:
+  - 'org.koocheh.transport.DiscoveryService { fun start(mode: ScanMode, windows: List<TimeWindow> = emptyList()); fun stop(); fun setAdvertisedId(id: EphemeralId); val sightings: Flow<Sighting> }'
+  - 'org.koocheh.transport.PeerLink { suspend fun open(sighting: Sighting): PeerChannel }'
+  - 'org.koocheh.transport.PeerChannel { suspend fun send(bytes: ByteArray); suspend fun receive(): ByteArray; fun close() } max 4096 bytes per exchange'
+  - 'org.koocheh.transport.RadioCapabilities { fun supportsCodedPhy(): Boolean }'
+  - 'org.koocheh.transport.RangeLog { fun record(rssiDbm: Int, distanceBucketMeters: Int); fun snapshot(): List<RangeSample> }'
+acceptance:
+  - cmd: test -f modules/transport-ble/src/main/kotlin/org/koocheh/transport/BleScanner.kt
+  - cmd: grep -q ScanScheduler modules/transport-ble/src/main/kotlin/org/koocheh/transport/ScanScheduler.kt
+  - cmd: grep -q supportsCodedPhy modules/transport-ble/src/main/kotlin/org/koocheh/transport/RadioCapabilities.kt

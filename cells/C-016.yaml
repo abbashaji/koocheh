@@ -1,0 +1,37 @@
+id: C-016
+title: pilot local metrics and manual export
+after:
+  - C-003
+goal: |
+  Create module modules/pilot (Android library, Kotlin). Package org.koocheh.pilot. Spec section 10: a 4-week pilot of about 50 users in one community, informed consent, no telemetry. Everything stays on the device; data leaves only when the participant triggers an export and shares the file by hand.
+  - PilotRecorder: local counters for mutual hellos per week, time from first signal to first mutual hello, day-14 retention (days the app was opened), battery cost samples per day, discovery success at distance buckets (consumes the RangeLog snapshot passed in by the caller), and self-reported meet-ups (user taps yes or no). Store counts only, never peer ids, tags or timestamps finer than a day. Writes through the ContextStore-independent small preferences file; if that needs the storage module, use only the contract below.
+  - ExperimentFlags: the three pilot experiments as explicit flags assigned locally by the pilot coordinator code, not by a server: familiar-stranger prompts versus a plain nearby list; tiered disclosure versus single-step reveal; invite token versus plain APK link.
+  - PilotExporter.exportJson(consent): produces a JSON file, refuses to run without a recorded consent object, and hands it to the system share sheet. Never uploads anything.
+  Tests: exporter refuses without consent; export contains no peer identifiers; counters aggregate by week correctly.
+  Global rules: no network code of any kind.
+allowed_paths:
+  - modules/pilot/**
+inputs:
+  - from: C-003
+    kind: implementation
+    contract: |
+      Use org.koocheh.model ContextId, DisclosureTier, Clock.
+  - from: C-006
+    kind: contract
+    contract: |
+      org.koocheh.storage.ContextStore { suspend purgeExpired(nowMs: Long) }; metrics may live in the same encrypted store. Code against a local interface with a test fake.
+outputs:
+  - modules/pilot/build.gradle.kts
+  - modules/pilot/src/main/kotlin/org/koocheh/pilot/PilotRecorder.kt
+  - modules/pilot/src/main/kotlin/org/koocheh/pilot/ExperimentFlags.kt
+  - modules/pilot/src/main/kotlin/org/koocheh/pilot/PilotExporter.kt
+  - modules/pilot/src/main/kotlin/org/koocheh/pilot/Consent.kt
+  - modules/pilot/src/test/kotlin/org/koocheh/pilot/PilotExporterTest.kt
+provides:
+  - 'org.koocheh.pilot.PilotRecorder { fun mutualHello(day: Int); fun firstSignal(day: Int); fun appOpened(day: Int); fun batterySample(percentPerDay: Float); fun meetUp(happened: Boolean) }'
+  - 'org.koocheh.pilot.PilotExporter { suspend fun exportJson(consent: Consent): ByteArray } refuses without consent'
+  - 'org.koocheh.pilot.ExperimentFlags { val familiarPrompts: Boolean; val tieredDisclosure: Boolean; val inviteTokens: Boolean }'
+acceptance:
+  - cmd: test -f modules/pilot/src/main/kotlin/org/koocheh/pilot/PilotExporter.kt
+  - cmd: grep -qi consent modules/pilot/src/main/kotlin/org/koocheh/pilot/PilotExporter.kt
+  - cmd: grep -q ExperimentFlags modules/pilot/src/main/kotlin/org/koocheh/pilot/ExperimentFlags.kt

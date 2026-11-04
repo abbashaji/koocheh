@@ -1,0 +1,50 @@
+id: C-008
+title: disclosure tiered mutual opt-in engine
+after:
+  - C-003
+goal: |
+  Create module modules/disclosure (pure Kotlin/JVM, coroutines). Package org.koocheh.disclosure. It is a state machine over the five tiers in spec 5.4, using injected interfaces only so it is testable with fakes.
+  Tiers: T0 signal (count of shared tags only, shown only when count >= user threshold, no identity). T1 both tap Say hello: shared tags by name plus the peer nickname. T2 both confirm again: one-line bio and age range. T3 both confirm again: blurred photo, then optional clear photo. T4 chat unlocks.
+  Rules: each step needs both sides. A step taken by one side reveals nothing until the other side takes it too (commit-then-reveal using the Commitments contract: send commitment first, reveal nonce and value only after the peer's commitment arrives). Either side can withdraw at any tier; withdrawal calls ContextStore.deletePeer and discards in-memory state, so everything exchanged is deleted. Wire messages are small versioned records, max 4 KB, serialised with kotlinx-serialization. Reject out-of-order or repeated messages. The PSI session runs at COUNT_ONLY for T0 and TAGS from T1.
+  Tests: a full happy path across two engines connected by an in-memory channel; a one-sided confirm reveals nothing; withdrawal at each tier deletes stored data; tampered commitment aborts.
+  Global rules: no network code; never log tags or nicknames.
+allowed_paths:
+  - modules/disclosure/**
+inputs:
+  - from: C-003
+    kind: implementation
+    contract: |
+      Use org.koocheh.model Profile, InterestTag, AgeRange, DisclosureTier, ContextId.
+  - from: C-004
+    kind: contract
+    contract: |
+      org.koocheh.crypto.Commitments { fun commit(value: ByteArray): Commit(commitment, nonce); fun verify(commitment: ByteArray, nonce: ByteArray, value: ByteArray): Boolean }. Code against a local interface plus a test fake.
+  - from: C-005
+    kind: contract
+    contract: |
+      org.koocheh.psi.PsiEngine.newSession(localTags, reveal: RevealLevel): PsiSession; PsiSession.outgoing(): ByteArray, incoming(msg), result: PsiResult(count, sharedTags?) with sharedTags null under COUNT_ONLY.
+  - from: C-006
+    kind: contract
+    contract: |
+      org.koocheh.storage.ContextStore { putPeerRecord(peerKey, tier, payload), getPeerRecord(peerKey), deletePeer(peerKey) removes everything exchanged }.
+  - from: C-007
+    kind: contract
+    contract: |
+      org.koocheh.transport.PeerChannel { suspend send(bytes), suspend receive(): ByteArray, close() } max 4096 bytes per exchange.
+outputs:
+  - modules/disclosure/build.gradle.kts
+  - modules/disclosure/src/main/kotlin/org/koocheh/disclosure/TierState.kt
+  - modules/disclosure/src/main/kotlin/org/koocheh/disclosure/DisclosureEngine.kt
+  - modules/disclosure/src/main/kotlin/org/koocheh/disclosure/CommitReveal.kt
+  - modules/disclosure/src/main/kotlin/org/koocheh/disclosure/WireMessages.kt
+  - modules/disclosure/src/main/kotlin/org/koocheh/disclosure/WithdrawalHandler.kt
+  - modules/disclosure/src/test/kotlin/org/koocheh/disclosure/DisclosureEngineTest.kt
+  - modules/disclosure/src/test/kotlin/org/koocheh/disclosure/CommitRevealTest.kt
+provides:
+  - 'org.koocheh.disclosure.DisclosureEngine { fun open(channel: PeerChannel, context: ContextId): DisclosureSession }'
+  - 'org.koocheh.disclosure.DisclosureSession { val state: StateFlow<TierState>; suspend fun sayHello(); suspend fun confirmNext(); suspend fun withdraw() }'
+  - 'org.koocheh.disclosure.TierState(tier: DisclosureTier, sharedCount: Int?, sharedTags: Set<InterestTag>?, peerNickname: String?, peerLine: String?, peerAgeRange: AgeRange?, peerPhoto: PeerPhoto?, withdrawn: Boolean)'
+acceptance:
+  - cmd: test -f modules/disclosure/src/main/kotlin/org/koocheh/disclosure/DisclosureEngine.kt
+  - cmd: grep -q withdraw modules/disclosure/src/main/kotlin/org/koocheh/disclosure/WithdrawalHandler.kt
+  - cmd: grep -q TierState modules/disclosure/src/main/kotlin/org/koocheh/disclosure/TierState.kt

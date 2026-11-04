@@ -1,0 +1,43 @@
+id: C-014
+title: ui core onboarding, profile, lock, settings
+after:
+  - C-013
+goal: |
+  Compose screens for the non-discovery parts of the app. Package org.koocheh.ui. Write only inside the ui folders listed in allowed_paths.
+  - UiCopy.kt: all user-facing strings that carry safety meaning. Plain language. Includes the onboarding risk briefing: the software cannot remove the legal and social consequences of what users do, it reduces risk but does not remove it, and compelled unlock is not defended against. No streaks, daily rewards, someone-liked-you teasers, fake counts or urgency anywhere in copy.
+  - OnboardingScreen: risk briefing with an explicit acknowledge step, invite activation (calls the invites contract only through a UI callback interface, not directly), PIN creation.
+  - UnlockScreen: PIN entry calls KeyVault.unlock and routes through DecoyGate; WIPED shows the fresh-install screen; WRONG shows a plain error with no retry hints about decoy or wipe PINs.
+  - ProfileEditorScreen and ContextSwitcher: nickname, age range, up to 10 tags, 140-char line, optional photo (off by default), separate per context; switching context never shows the other context's data.
+  - SettingsScreen and SecuritySettingsScreen: scan mode (Passive, Normal, Commute with time windows), Tier 0 threshold, familiar-stranger threshold, decoy PIN, wipe PIN, panic gesture, launcher alias choice. Defaults safest first.
+  Apply SecureWindowPolicy on every screen here. Global rules: no network code; never log PINs or tags.
+allowed_paths:
+  - app/src/main/kotlin/org/koocheh/ui/onboarding/**
+  - app/src/main/kotlin/org/koocheh/ui/lock/**
+  - app/src/main/kotlin/org/koocheh/ui/profile/**
+  - app/src/main/kotlin/org/koocheh/ui/settings/**
+  - app/src/main/kotlin/org/koocheh/ui/UiCopy.kt
+inputs:
+  - from: C-013
+    kind: implementation
+    contract: |
+      The app module exists with Compose enabled, MainActivity as the single activity and org.koocheh.ServiceLocator holding lazy providers. LauncherAliasManager.select(alias) switches the launcher entry.
+  - from: C-006
+    kind: contract
+    contract: |
+      org.koocheh.storage.KeyVault { unlock(pin: CharArray): UnlockResult; enrollDecoyPin(pin); enrollWipePin(pin) }; UnlockResult { REAL, DECOY, WIPED, WRONG }. Code against a local interface and preview fakes.
+  - from: C-010
+    kind: contract
+    contract: |
+      org.koocheh.security.DecoyGate.route(result: UnlockResult): AppMode { REAL, DECOY, LOCKED }; PanicWipe.execute(); SecureWindowPolicy.apply(window); PhotoSanitizer.sanitize(image).
+outputs:
+  - app/src/main/kotlin/org/koocheh/ui/UiCopy.kt
+  - app/src/main/kotlin/org/koocheh/ui/onboarding/OnboardingScreen.kt
+  - app/src/main/kotlin/org/koocheh/ui/lock/UnlockScreen.kt
+  - app/src/main/kotlin/org/koocheh/ui/profile/ProfileEditorScreen.kt
+  - app/src/main/kotlin/org/koocheh/ui/profile/ContextSwitcher.kt
+  - app/src/main/kotlin/org/koocheh/ui/settings/SettingsScreen.kt
+  - app/src/main/kotlin/org/koocheh/ui/settings/SecuritySettingsScreen.kt
+acceptance:
+  - cmd: test -f app/src/main/kotlin/org/koocheh/ui/UiCopy.kt
+  - cmd: grep -qi consequences app/src/main/kotlin/org/koocheh/ui/UiCopy.kt
+  - cmd: grep -q DecoyGate app/src/main/kotlin/org/koocheh/ui/lock/UnlockScreen.kt

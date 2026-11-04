@@ -1,0 +1,52 @@
+id: C-015
+title: ui flows signals, hello tiers, chat, navigation
+after:
+  - C-013
+goal: |
+  Compose screens and view-models for the discovery side of the app. Package org.koocheh.ui. Write only inside the folders in allowed_paths.
+  - SignalsScreen and SignalsViewModel: Tier 0 list. Each row says only that someone nearby shares N of your interests, N at or above the user threshold; no identity, no sorting by recency pressure, no unread badge, no fake counts, no teaser notifications.
+  - FamiliarPromptCard: shows a FamiliarPrompt from the familiar contract with calm wording; dismissible; never reappears for the same prompt in the same week.
+  - HelloFlowScreen and DisclosureViewModel: drives DisclosureSession through Tiers 1 to 3. Each step says plainly what the other person will see and that nothing is revealed until they confirm too. A Withdraw button is visible at every tier and states that everything exchanged is deleted.
+  - PhotoRevealView: blurred until Tier 3, then optional clear photo, only after both confirm.
+  - ChatScreen: conversation from ChatService, shows the expiry time on each message, no content in notifications.
+  - AppNavHost: navigation graph hooking onboarding, lock, profile, signals, hello flow, chat and settings routes by string constants (the screens in ui/onboarding, ui/lock, ui/profile, ui/settings are built by another cell; reference them only through route names).
+  Apply SecureWindowPolicy on every screen here. Global rules: no network code; never log tags, nicknames or message text.
+allowed_paths:
+  - app/src/main/kotlin/org/koocheh/ui/signals/**
+  - app/src/main/kotlin/org/koocheh/ui/disclosure/**
+  - app/src/main/kotlin/org/koocheh/ui/chat/**
+  - app/src/main/kotlin/org/koocheh/ui/nav/**
+inputs:
+  - from: C-013
+    kind: implementation
+    contract: |
+      The app module exists with Compose enabled, MainActivity as the single activity and org.koocheh.ServiceLocator holding lazy providers.
+  - from: C-008
+    kind: contract
+    contract: |
+      org.koocheh.disclosure.DisclosureSession { val state: StateFlow<TierState>; suspend sayHello(); suspend confirmNext(); suspend withdraw() }; TierState(tier, sharedCount: Int?, sharedTags: Set<InterestTag>?, peerNickname: String?, peerLine: String?, peerAgeRange: AgeRange?, peerPhoto: PeerPhoto?, withdrawn: Boolean).
+  - from: C-009
+    kind: contract
+    contract: |
+      org.koocheh.familiar.FamiliarTracker { suspend prompts(context: ContextId, today: Int): List<FamiliarPrompt> }; FamiliarPrompt(encounters: Int, windowDays: Int).
+  - from: C-012
+    kind: contract
+    contract: |
+      org.koocheh.chat.ChatService { suspend send(peerKey: String, text: String); conversation(peerKey: String): Flow<List<ChatMessage>> }; ChatMessage(id, text, sentAtMs, expiresAtMs, mine).
+  - from: C-010
+    kind: contract
+    contract: |
+      org.koocheh.security.SecureWindowPolicy.apply(window); PhotoSanitizer.blurred(sanitized: ByteArray): ByteArray.
+outputs:
+  - app/src/main/kotlin/org/koocheh/ui/signals/SignalsScreen.kt
+  - app/src/main/kotlin/org/koocheh/ui/signals/SignalsViewModel.kt
+  - app/src/main/kotlin/org/koocheh/ui/signals/FamiliarPromptCard.kt
+  - app/src/main/kotlin/org/koocheh/ui/disclosure/HelloFlowScreen.kt
+  - app/src/main/kotlin/org/koocheh/ui/disclosure/DisclosureViewModel.kt
+  - app/src/main/kotlin/org/koocheh/ui/disclosure/PhotoRevealView.kt
+  - app/src/main/kotlin/org/koocheh/ui/chat/ChatScreen.kt
+  - app/src/main/kotlin/org/koocheh/ui/nav/AppNavHost.kt
+acceptance:
+  - cmd: test -f app/src/main/kotlin/org/koocheh/ui/signals/SignalsScreen.kt
+  - cmd: grep -qi withdraw app/src/main/kotlin/org/koocheh/ui/disclosure/HelloFlowScreen.kt
+  - cmd: test -f app/src/main/kotlin/org/koocheh/ui/nav/AppNavHost.kt

@@ -1,0 +1,43 @@
+id: C-011
+title: invites signed tokens and APK sharing
+after:
+  - C-003
+goal: |
+  Create module modules/invites (Android library, Kotlin). Package org.koocheh.invites. Spec section 8: invite-only distribution by in-person signed tokens.
+  Design (assumption, recorded in a file comment because the spec leaves offline replay open): two-step in-person ceremony. Step 1 the new install shows its own public key as a QR code. Step 2 the member scans it and shows back a QR containing an InviteToken bound to that public key. A photographed token is useless to anyone else.
+  - InviteToken: version, context (ContextId), issuer public key, invitee public key, random nonce, expiry (issue time + 7 days), signature. Compact binary or base64url codec in QrCodec; zxing from the catalog for QR encode.
+  - InviteIssuer: creates tokens signed with the Signer contract and keeps a local issued-nonce ledger; refuses to issue or re-accept the same nonce twice (single use).
+  - InviteVerifier: checks signature, expiry, context binding, invitee key match, and unused nonce. Returns a typed result, never throws on bad input.
+  - SigningFingerprint: reads this APK's signing certificate fingerprint for display so users can compare it to the published value.
+  - ApkShare: hands the installed APK to another phone through the system share sheet with a Bluetooth target; Wi-Fi Direct bulk transfer is v1.5 and out of scope.
+  Tests in InviteTokenTest: expiry boundary, wrong context, wrong invitee key, replayed nonce, truncated input.
+  Global rules: no network code; never log tokens or keys.
+allowed_paths:
+  - modules/invites/**
+inputs:
+  - from: C-003
+    kind: implementation
+    contract: |
+      Use org.koocheh.model ContextId and Clock.
+  - from: C-004
+    kind: contract
+    contract: |
+      org.koocheh.crypto.Signer { fun newKeypair(): KeyPair; fun sign(secretKey: ByteArray, message: ByteArray): ByteArray; fun verify(publicKey: ByteArray, message: ByteArray, signature: ByteArray): Boolean }. Code against a local interface with a test fake.
+outputs:
+  - modules/invites/build.gradle.kts
+  - modules/invites/src/main/kotlin/org/koocheh/invites/InviteToken.kt
+  - modules/invites/src/main/kotlin/org/koocheh/invites/InviteIssuer.kt
+  - modules/invites/src/main/kotlin/org/koocheh/invites/InviteVerifier.kt
+  - modules/invites/src/main/kotlin/org/koocheh/invites/QrCodec.kt
+  - modules/invites/src/main/kotlin/org/koocheh/invites/ApkShare.kt
+  - modules/invites/src/main/kotlin/org/koocheh/invites/SigningFingerprint.kt
+  - modules/invites/src/test/kotlin/org/koocheh/invites/InviteTokenTest.kt
+provides:
+  - 'org.koocheh.invites.InviteIssuer { fun issue(context: ContextId, inviteePublicKey: ByteArray, nowMs: Long): InviteToken }'
+  - 'org.koocheh.invites.InviteVerifier { fun verify(token: InviteToken, ownPublicKey: ByteArray, nowMs: Long): InviteResult }'
+  - 'org.koocheh.invites.QrCodec { fun encode(token: InviteToken): ByteArray; fun decode(bytes: ByteArray): InviteToken? }'
+  - 'org.koocheh.invites.SigningFingerprint { fun current(): String }'
+acceptance:
+  - cmd: test -f modules/invites/src/main/kotlin/org/koocheh/invites/InviteVerifier.kt
+  - cmd: grep -qi expir modules/invites/src/main/kotlin/org/koocheh/invites/InviteToken.kt
+  - cmd: grep -q SigningFingerprint modules/invites/src/main/kotlin/org/koocheh/invites/SigningFingerprint.kt

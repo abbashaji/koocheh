@@ -1,0 +1,45 @@
+id: C-012
+title: chat end-to-end encrypted expiring messages
+after:
+  - C-003
+goal: |
+  Create module modules/chat (Kotlin). Package org.koocheh.chat. Tier 4 of spec 5.4: encrypted chat between matched phones with expiring messages, default 24 hours.
+  - ChatSessionManager: opens a SecureSession (contract from C-004) over a PeerChannel (contract from C-007) when both sides reached T4. Messages that cannot be delivered because the peer is out of range are queued encrypted in the store and sent on next contact.
+  - MessageEnvelope: versioned, serialised with kotlinx-serialization, carries id, sent time, expiry, ciphertext only; plaintext never leaves ChatService.
+  - ChatService: send(peerKey, text), conversation(peerKey): Flow<List<ChatMessage>>, purgeExpired(). Expiry default 24 h, user-adjustable shorter. Withdrawal by either side deletes the conversation.
+  - ExpiryWorker: scheduled local purge using the storage purgeExpired contract; no content ever goes into a notification text.
+  Tests: expiry boundary, queued delivery order, decrypt failure is dropped not shown, withdrawal deletes.
+  Global rules: no network code; never log message text.
+allowed_paths:
+  - modules/chat/**
+inputs:
+  - from: C-003
+    kind: implementation
+    contract: |
+      Use org.koocheh.model ContextId and Clock.
+  - from: C-004
+    kind: contract
+    contract: |
+      org.koocheh.crypto.SecureSession { encrypt(plain: ByteArray): ByteArray; decrypt(cipher: ByteArray): ByteArray } forward secret, created via SecureSessionFactory.start(role, ownStatic, peerStaticPublic): HandshakeState with next(incoming): ByteArray? and session(): SecureSession?.
+  - from: C-006
+    kind: contract
+    contract: |
+      org.koocheh.storage.ContextStore { putMessage(peerKey, expiresAtMs, cipher); messages(peerKey): List<StoredMessage>; deletePeer(peerKey); purgeExpired(nowMs) }.
+  - from: C-007
+    kind: contract
+    contract: |
+      org.koocheh.transport.PeerChannel { suspend send(bytes), suspend receive(): ByteArray, close() } max 4096 bytes per exchange.
+outputs:
+  - modules/chat/build.gradle.kts
+  - modules/chat/src/main/kotlin/org/koocheh/chat/ChatService.kt
+  - modules/chat/src/main/kotlin/org/koocheh/chat/MessageEnvelope.kt
+  - modules/chat/src/main/kotlin/org/koocheh/chat/ChatSessionManager.kt
+  - modules/chat/src/main/kotlin/org/koocheh/chat/ExpiryWorker.kt
+  - modules/chat/src/test/kotlin/org/koocheh/chat/ChatServiceTest.kt
+provides:
+  - 'org.koocheh.chat.ChatService { suspend fun send(peerKey: String, text: String); fun conversation(peerKey: String): Flow<List<ChatMessage>>; suspend fun purgeExpired() }'
+  - 'org.koocheh.chat.ChatMessage(id: String, text: String, sentAtMs: Long, expiresAtMs: Long, mine: Boolean)'
+acceptance:
+  - cmd: test -f modules/chat/src/main/kotlin/org/koocheh/chat/ChatService.kt
+  - cmd: grep -q purgeExpired modules/chat/src/main/kotlin/org/koocheh/chat/ChatService.kt
+  - cmd: grep -q 24 modules/chat/src/main/kotlin/org/koocheh/chat/MessageEnvelope.kt

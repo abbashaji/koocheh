@@ -1,0 +1,37 @@
+id: C-009
+title: familiar-strangers encounter counting
+after:
+  - C-003
+goal: |
+  Create module modules/familiar (pure Kotlin/JVM). Package org.koocheh.familiar. Spec 5.5: locally count how often the same interest-matched cluster was seen, keeping only a coarse day count, never places or timestamps. After a user-set threshold (default 3 encounters) offer the prompt text: you have crossed paths with someone who shares interests, N times this week. Counts are on-device and deleted after 14 days.
+  OPEN DESIGN POINT (do not paper over it): spec 5.5 does not say how encounters are linked across ephemeral id rotations (ids change every 10 to 15 minutes). Introducing any stable handle would break unlinkability. Implement an EncounterLinker interface that turns a completed Tier 0 match into a linkKey, and ship one default: an HMAC with a local secret of the sorted shared-tag set plus the day, so the same overlap set on the same day counts once. State in the file comment that this can conflate different people who share the same overlap and cannot link a person whose overlap changes. Report this through cell_signal feedback only if the interface proves unworkable; otherwise record it in a comment and continue.
+  Components: DayBucket (epoch day int only), FamiliarPolicy (threshold, window 7 days, expiry 14 days, prompt text without urgency or teaser wording), FamiliarTracker.record(context, linkKey, day) and prompts(context, today).
+  Tests: threshold boundary, expiry at 14 days, no timestamp finer than a day is ever passed to the store.
+  Global rules: no network code; never log link keys or tags.
+allowed_paths:
+  - modules/familiar/**
+inputs:
+  - from: C-003
+    kind: implementation
+    contract: |
+      Use org.koocheh.model ContextId, InterestTag, Clock.
+  - from: C-006
+    kind: contract
+    contract: |
+      org.koocheh.storage.ContextStore { suspend incrementEncounter(linkKey: ByteArray, day: Int); suspend encountersFor(linkKey: ByteArray, sinceDay: Int): List<Int>; suspend purgeExpired(nowMs: Long) }.
+outputs:
+  - modules/familiar/build.gradle.kts
+  - modules/familiar/src/main/kotlin/org/koocheh/familiar/DayBucket.kt
+  - modules/familiar/src/main/kotlin/org/koocheh/familiar/EncounterLinker.kt
+  - modules/familiar/src/main/kotlin/org/koocheh/familiar/FamiliarPolicy.kt
+  - modules/familiar/src/main/kotlin/org/koocheh/familiar/FamiliarTracker.kt
+  - modules/familiar/src/test/kotlin/org/koocheh/familiar/FamiliarTrackerTest.kt
+  - modules/familiar/src/test/kotlin/org/koocheh/familiar/FamiliarPolicyTest.kt
+provides:
+  - 'org.koocheh.familiar.FamiliarTracker { suspend fun record(context: ContextId, linkKey: ByteArray, day: Int); suspend fun prompts(context: ContextId, today: Int): List<FamiliarPrompt> }'
+  - 'org.koocheh.familiar.FamiliarPrompt(encounters: Int, windowDays: Int)'
+  - 'org.koocheh.familiar.EncounterLinker { fun linkKey(context: ContextId, sharedTags: Set<InterestTag>, day: Int): ByteArray }'
+acceptance:
+  - cmd: test -f modules/familiar/src/main/kotlin/org/koocheh/familiar/FamiliarTracker.kt
+  - cmd: grep -q EncounterLinker modules/familiar/src/main/kotlin/org/koocheh/familiar/EncounterLinker.kt
+  - cmd: grep -q 14 modules/familiar/src/main/kotlin/org/koocheh/familiar/FamiliarPolicy.kt

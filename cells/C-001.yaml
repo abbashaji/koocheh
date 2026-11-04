@@ -1,0 +1,29 @@
+id: C-001
+title: Gradle root scaffold
+type: skeleton
+lease_minutes: 15
+goal: |
+  Create the root of an Android (Kotlin) multi-module Gradle build for Koocheh: a serverless, account-free, phone-to-phone BLE people-finding app. No backend, no analytics.
+  - settings.gradle.kts: rootProject.name = "koocheh". Include ":app" only if app/build.gradle.kts exists. Auto-include every directory modules/<name> that contains a build.gradle.kts as project ":modules:<name>", so later cells add modules without editing settings. Repositories: google() and mavenCentral() only.
+  - build.gradle.kts: root plugin declarations (android application, android library, kotlin android, kotlin serialization, compose compiler) with apply false, taken from the version catalog.
+  - gradle/libs.versions.toml: catalog with kotlin, agp, coroutines, kotlinx-serialization-json, compose bom, androidx core/activity/lifecycle/navigation, room, sqlcipher, lazysodium-android plus jna (libsodium binding), zxing-core (QR), junit, turbine. Every version is a pinned placeholder with the comment "# [UNVERIFIED] check before first build".
+  - gradle.properties: android.useAndroidX=true, kotlin.code.style=official, jvmargs, plus koocheh.applicationId=org.localkit.tools, koocheh.appLabel=Tools (neutral placeholders; owners decide the final name), koocheh.minSdk=26 with a comment that the real minimum API level is set after a hardware survey.
+  - .gitignore for Android/Gradle (build/, .gradle/, local.properties, *.jks, *.keystore).
+  Do not add Gradle wrapper binaries. Do not add INTERNET-related or analytics dependencies to the catalog.
+allowed_paths:
+  - settings.gradle.kts
+  - build.gradle.kts
+  - gradle/libs.versions.toml
+  - gradle.properties
+  - .gitignore
+outputs:
+  - settings.gradle.kts
+  - build.gradle.kts
+  - gradle/libs.versions.toml
+  - gradle.properties
+  - .gitignore
+acceptance:
+  - cmd: test -f settings.gradle.kts
+  - cmd: grep -q modules settings.gradle.kts
+  - cmd: grep -q lazysodium gradle/libs.versions.toml
+  - cmd: grep -q koocheh.applicationId gradle.properties

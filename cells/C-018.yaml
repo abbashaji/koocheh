@@ -1,0 +1,32 @@
+id: C-018
+title: release verification reproducible builds and signing guide
+after:
+  - C-013
+goal: |
+  Spec sections 7 and 8: reproducible builds and a published signing key fingerprint so users can verify copies; a short plain-language verification guide ships with every APK. Do not invent a fingerprint or claim reproducibility has been achieved; nothing here has been built or measured.
+  - gradle/reproducible.gradle.kts: a Gradle script that, when applied to the app module, sets deterministic archive ordering, strips timestamps, and disables build-time metadata that varies per machine. Comment every setting [UNVERIFIED] until two independent builds are compared byte for byte.
+  - scripts/verify-apk.sh: takes an APK path and the expected SHA-256 certificate fingerprint, uses apksigner (from the Android build tools) to print the signing certificate digest and exits non-zero on mismatch; usage text included. POSIX sh, no network.
+  - docs/distribution/reproducible-builds.md: how a second person rebuilds and compares, and the limits of that check.
+  - docs/distribution/verification-guide.md: plain-language steps for a non-technical user to check the fingerprint inside the app against the published one, in a few short steps, stating that users who skip verification stay exposed to tampered APKs.
+  - release/SIGNING_KEY_FINGERPRINT.md: a template with the text TO BE PUBLISHED BY MAINTAINERS AT RELEASE and an empty fingerprint field; no value.
+allowed_paths:
+  - gradle/reproducible.gradle.kts
+  - scripts/**
+  - docs/distribution/**
+  - release/**
+inputs:
+  - from: C-013
+    kind: implementation
+    contract: |
+      app/build.gradle.kts exists (Android application module). The reproducible script is applied to it later by the integration cell, not by this cell.
+outputs:
+  - gradle/reproducible.gradle.kts
+  - scripts/verify-apk.sh
+  - docs/distribution/reproducible-builds.md
+  - docs/distribution/verification-guide.md
+  - release/SIGNING_KEY_FINGERPRINT.md
+acceptance:
+  - cmd: test -f scripts/verify-apk.sh
+  - cmd: grep -q apksigner scripts/verify-apk.sh
+  - cmd: grep -q UNVERIFIED gradle/reproducible.gradle.kts
+  - cmd: grep -q 'TO BE PUBLISHED' release/SIGNING_KEY_FINGERPRINT.md

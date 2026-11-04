@@ -1,0 +1,43 @@
+id: C-010
+title: security decoy mode, panic wipe, window and notification policy
+after:
+  - C-003
+goal: |
+  Create module modules/security (Android library, Kotlin). Package org.koocheh.security. Spec section 7 must-haves.
+  - DecoyGate: maps an UnlockResult from the KeyVault (REAL, DECOY, WIPED, WRONG) to an AppMode { REAL, DECOY, LOCKED }. In DECOY mode the app is fully functional against the empty decoy store; DecoyContent supplies innocuous sample profiles and tags so the dummy view is not suspiciously empty. WIPED routes to a state indistinguishable from a fresh install.
+  - PanicWipe.execute(): single entry point for a gesture or the wipe PIN. Calls KeyVault.destroyAll(), stops discovery, clears notifications and recents, finishes all activities. Must complete without needing the network or a confirmation dialog, and be idempotent.
+  - SecureWindowPolicy.apply(window): sets FLAG_SECURE on sensitive screens so no screenshots or recents thumbnails.
+  - NotificationPolicy: every notification uses generic text and a neutral channel name; no peer, tag or count content ever appears in a notification.
+  - PhotoSanitizer: strips metadata (EXIF and similar), re-encodes, and produces a blurred variant used until Tier 3. Photos are off by default.
+  Tests in SecurityPoliciesTest: gate mapping for all four results; wipe idempotence with a fake vault; notification text contains no dynamic content.
+  Global rules: no network code; never log PINs or ids. A code comment [UNVERIFIED] on any Android API behaviour not run on a device. Do not claim decoy mode defeats compelled unlock.
+allowed_paths:
+  - modules/security/**
+inputs:
+  - from: C-003
+    kind: implementation
+    contract: |
+      Use org.koocheh.model ContextId.
+  - from: C-006
+    kind: contract
+    contract: |
+      org.koocheh.storage.KeyVault { fun unlock(pin: CharArray): UnlockResult; fun lock(); fun destroyAll() }; UnlockResult { REAL, DECOY, WIPED, WRONG }. Code against local interfaces and test fakes.
+outputs:
+  - modules/security/build.gradle.kts
+  - modules/security/src/main/kotlin/org/koocheh/security/DecoyGate.kt
+  - modules/security/src/main/kotlin/org/koocheh/security/DecoyContent.kt
+  - modules/security/src/main/kotlin/org/koocheh/security/PanicWipe.kt
+  - modules/security/src/main/kotlin/org/koocheh/security/SecureWindowPolicy.kt
+  - modules/security/src/main/kotlin/org/koocheh/security/NotificationPolicy.kt
+  - modules/security/src/main/kotlin/org/koocheh/security/PhotoSanitizer.kt
+  - modules/security/src/test/kotlin/org/koocheh/security/SecurityPoliciesTest.kt
+provides:
+  - 'org.koocheh.security.DecoyGate { fun route(result: UnlockResult): AppMode } AppMode { REAL, DECOY, LOCKED }'
+  - 'org.koocheh.security.PanicWipe { suspend fun execute() } idempotent'
+  - 'org.koocheh.security.SecureWindowPolicy { fun apply(window: Window) }'
+  - 'org.koocheh.security.NotificationPolicy { fun generic(): Notification }'
+  - 'org.koocheh.security.PhotoSanitizer { fun sanitize(image: ByteArray): ByteArray; fun blurred(sanitized: ByteArray): ByteArray }'
+acceptance:
+  - cmd: test -f modules/security/src/main/kotlin/org/koocheh/security/PanicWipe.kt
+  - cmd: grep -q FLAG_SECURE modules/security/src/main/kotlin/org/koocheh/security/SecureWindowPolicy.kt
+  - cmd: grep -q DecoyGate modules/security/src/main/kotlin/org/koocheh/security/DecoyGate.kt

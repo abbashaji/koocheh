@@ -1,0 +1,36 @@
+id: C-005
+title: core-psi private set intersection seam
+after:
+  - C-003
+goal: |
+  Create module modules/core-psi (Kotlin). Package org.koocheh.psi. Purpose: each side learns only the interest tags both hold, not the other side's unmatched tags (spec 5.3). Plain hashing of tags is guessable because the vocabulary is small, so it is not allowed here.
+  Do NOT write a PSI or OPRF protocol yourself and do NOT invent a library API. This cell delivers the seam, not the cryptography:
+  - PsiEngine.newSession(localTags, reveal): PsiSession, with RevealLevel { COUNT_ONLY, TAGS }. PsiSession.outgoing(): ByteArray, incoming(msg: ByteArray), result: PsiResult? where PsiResult(count: Int, sharedTags: Set<InterestTag>?) and sharedTags is null under COUNT_ONLY. The COUNT_ONLY level exists because Tier 0 shows only a shared count and Tier 1 reveals names.
+  - FakePsiEngine in src/testFixtures, clearly named and commented as insecure and for tests only; it must refuse to be constructed in a release build type.
+  - A contract test that any engine must pass: symmetric result, nothing about unmatched tags in the transcript, count equals intersection size.
+  - A benchmark harness (androidTest) measuring round time for 10 tags per side, for low-end devices.
+  - LIBRARY_EVALUATION.md: candidate approaches and what must be checked (maintenance status, audit status, mobile performance at 10-tag card size, availability of a cardinality-only mode). Every factual claim about a library is marked [UNVERIFIED]. End with the decision that owners must make.
+  Global rules: no network code; never log tags.
+allowed_paths:
+  - modules/core-psi/**
+inputs:
+  - from: C-003
+    kind: implementation
+    contract: |
+      Use org.koocheh.model InterestTag(value) normalised lowercase.
+outputs:
+  - modules/core-psi/build.gradle.kts
+  - modules/core-psi/src/main/kotlin/org/koocheh/psi/PsiEngine.kt
+  - modules/core-psi/src/testFixtures/kotlin/org/koocheh/psi/FakePsiEngine.kt
+  - modules/core-psi/src/test/kotlin/org/koocheh/psi/PsiContractTest.kt
+  - modules/core-psi/src/androidTest/kotlin/org/koocheh/psi/PsiBenchmark.kt
+  - modules/core-psi/LIBRARY_EVALUATION.md
+provides:
+  - 'org.koocheh.psi.PsiEngine { fun newSession(localTags: Set<InterestTag>, reveal: RevealLevel): PsiSession }'
+  - 'org.koocheh.psi.PsiSession { fun outgoing(): ByteArray; fun incoming(msg: ByteArray); val result: PsiResult? }'
+  - 'org.koocheh.psi.PsiResult(count: Int, sharedTags: Set<InterestTag>?) sharedTags null under COUNT_ONLY'
+  - 'org.koocheh.psi.RevealLevel { COUNT_ONLY, TAGS }'
+acceptance:
+  - cmd: test -f modules/core-psi/src/main/kotlin/org/koocheh/psi/PsiEngine.kt
+  - cmd: grep -q RevealLevel modules/core-psi/src/main/kotlin/org/koocheh/psi/PsiEngine.kt
+  - cmd: grep -q UNVERIFIED modules/core-psi/LIBRARY_EVALUATION.md

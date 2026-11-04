@@ -1,0 +1,41 @@
+id: C-013
+title: app shell manifest, application, foreground service
+after:
+  - C-003
+goal: |
+  Create the Android application module app/ (Kotlin, Jetpack Compose). Package org.koocheh. This is the shell only; real module wiring is done by the integration cell, so app/build.gradle.kts depends on :modules:core-model only for now (a project() reference to a module that does not exist yet would break Gradle configuration).
+  - build.gradle.kts: applicationId and label from gradle.properties (koocheh.applicationId, koocheh.appLabel), minSdk from koocheh.minSdk, compose enabled, release build type with minify and no debug symbols leaking the project name.
+  - AndroidManifest.xml: permissions only BLUETOOTH_SCAN (neverForLocation), BLUETOOTH_ADVERTISE, BLUETOOTH_CONNECT, FOREGROUND_SERVICE plus the connected-device foreground type, POST_NOTIFICATIONS, and legacy Bluetooth permissions limited by maxSdkVersion for older API levels [UNVERIFIED exact set]. It must NOT declare INTERNET, contacts, phone state, phone numbers or location for API 31+. allowBackup=false and data extraction rules excluding everything (no cloud backup). Launcher entry is an activity-alias with a neutral label; add two more disabled aliases with other utility-style labels.
+  - KoochehApp.kt (Application), MainActivity.kt (single activity, Compose host with an empty nav placeholder that later cells fill), ServiceLocator.kt (interfaces and lazy providers only, throwing a clear NotWiredYet error for anything not provided).
+  - DiscoveryForegroundService.kt: owns scanning in the background with a generic notification text (no counts, no names).
+  - LauncherAliasManager.kt: enables one launcher alias and disables the others.
+  - res/values/strings.xml with neutral strings. Icons are placeholders to be replaced by a designer; do not add brand artwork.
+  Global rules: no network code; never log ids.
+allowed_paths:
+  - app/build.gradle.kts
+  - app/src/main/AndroidManifest.xml
+  - app/src/main/kotlin/org/koocheh/*.kt
+  - app/src/main/res/**
+inputs:
+  - from: C-003
+    kind: implementation
+    contract: |
+      Use org.koocheh.model ContextId, ScanMode.
+outputs:
+  - app/build.gradle.kts
+  - app/src/main/AndroidManifest.xml
+  - app/src/main/kotlin/org/koocheh/KoochehApp.kt
+  - app/src/main/kotlin/org/koocheh/MainActivity.kt
+  - app/src/main/kotlin/org/koocheh/ServiceLocator.kt
+  - app/src/main/kotlin/org/koocheh/DiscoveryForegroundService.kt
+  - app/src/main/kotlin/org/koocheh/LauncherAliasManager.kt
+  - app/src/main/res/values/strings.xml
+provides:
+  - 'org.koocheh.ServiceLocator { lazy providers for DiscoveryService, DisclosureEngine, FamiliarTracker, ChatService, KeyVault, PanicWipe filled in by the integration cell }'
+  - 'org.koocheh.LauncherAliasManager { fun select(alias: LauncherAlias) }'
+acceptance:
+  - cmd: test -f app/src/main/AndroidManifest.xml
+  - cmd: sh -c '! grep -q android.permission.INTERNET app/src/main/AndroidManifest.xml'
+  - cmd: sh -c '! grep -q READ_CONTACTS app/src/main/AndroidManifest.xml'
+  - cmd: grep -q allowBackup app/src/main/AndroidManifest.xml
+  - cmd: grep -q activity-alias app/src/main/AndroidManifest.xml

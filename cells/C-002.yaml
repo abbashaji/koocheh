@@ -1,0 +1,35 @@
+id: C-002
+title: Architecture documents
+goal: |
+  Write the architecture documentation for Koocheh (spec v1.0, pre-pilot) as markdown under docs/architecture/. Source material is in `notes`; this repo has no copy of the spec, so keep every [UNVERIFIED] marker exactly where the notes put it and never state an unchecked fact as verified. Never claim a mechanism guarantees or eliminates a risk.
+  Files:
+  - overview.md: one-paragraph summary; the 6 design principles in priority order; personas; scope by version (v1, v1.5, later); architecture table (platform, storage, identity, transport, crypto, backend none, telemetry none).
+  - module-map.md: the Gradle modules and who owns them, dependency direction (core-model is the base; no module depends on app; app depends on all), and the interface each module exposes (see the cell list: C-003 core-model, C-004 core-crypto, C-005 core-psi, C-006 storage, C-007 transport-ble, C-008 disclosure, C-009 familiar, C-010 security, C-011 invites, C-012 chat, C-013..C-015 app, C-016 pilot, C-017 integration, C-018 release, C-019 audit prep).
+  - threat-model.md: the threat table from notes, plus the sentence that the software cannot remove legal and social consequences and onboarding must say so.
+  - unverified-register.md: a table of every [UNVERIFIED] claim from notes with the spec section it came from and how it will be checked (pilot, audit, or library review).
+  - open-problems.md: the open problems from notes, stated not solved, ending on them rather than a tidy conclusion.
+  - cut-features.md: cut or deferred features with the reason for each.
+allowed_paths:
+  - docs/architecture/**
+outputs:
+  - docs/architecture/overview.md
+  - docs/architecture/module-map.md
+  - docs/architecture/threat-model.md
+  - docs/architecture/unverified-register.md
+  - docs/architecture/open-problems.md
+  - docs/architecture/cut-features.md
+acceptance:
+  - cmd: test -f docs/architecture/overview.md
+  - cmd: test -f docs/architecture/module-map.md
+  - cmd: grep -q UNVERIFIED docs/architecture/unverified-register.md
+  - cmd: grep -qi entrapment docs/architecture/open-problems.md
+  - cmd: grep -qi streak docs/architecture/cut-features.md
+notes: |
+  PRINCIPLES (priority order): 1 Safety and deniability beat every other goal. 2 No central party: no server, no analytics, no accounts, no cloud backup. 3 Reveal nothing one-sidedly: interest, identity, photos disclosed only in mutual stepwise exchanges. 4 Honest by construction: no fake activity counts, invented urgency, teaser notifications. 5 Density over scale. 6 Say what is unverified.
+  PERSONAS: student or maker (study group, band, project team; Work). Founder or developer (co-founder; Work). Newcomer or hobbyist (friends; Social). Someone seeking a relationship (Social, opt-in).
+  SCOPE: v1 = Android only, BLE discovery, local profile, interest cards, mutual-opt-in matching, tiered disclosure, E2E encrypted chat, contexts Work/Social, invite-only install, decoy mode, panic wipe, encrypted local storage, phone-to-phone APK sharing. v1.5 only if pilot gates pass = Wi-Fi Aware/Direct transfer, store-and-forward gossip (200 cards, hop limit 4, expiry 72 h), offline vouching. Later = UWB confirmation, external LoRa text relay, iOS (limited background Bluetooth and distribution constraints [UNVERIFIED]).
+  ARCHITECTURE: native Kotlin Android, min API after hardware survey; encrypted DB with key in Android Keystore additionally wrapped by user PIN; per-context keypairs on-device, no global identity; BLE advertising for discovery, GATT for small exchanges, Wi-Fi Aware/Direct for bulk (v1.5); audited libraries only (e.g. libsodium), PSI from a maintained library, forward-secret chat; no backend; no telemetry, crash reports manual and user-initiated.
+  THREATS (threat, mitigation, residual): Passive Bluetooth tracking / rotating IDs, no stable payload / timing and RSSI correlation by a motivated observer. Phone seized and inspected / decoy mode, encryption, wipe / cannot defend against compelled unlock or forced app reveal. Hostile participant / mutual tiers, vouching, local blocks / entrapment and infiltration unsolved. Tampered APK / signed builds, fingerprint check / users who skip verification. Metadata through gossip / hop limits, delay, batching / pattern leakage remains. Network-level blocking / not applicable, no network / cannot help if radios are jammed.
+  UNVERIFIED CLAIMS: indoor BLE range far below datasheet; PSI mobile performance at this card size; gossip batching/delay effect; iOS limits; existing mesh apps had tracking flaws (specifics); local Android store acceptance; proximity-effect size in modern studies; 36-questions replication mixed; gossip leak of who met whom.
+  OPEN PROBLEMS: 1 Legal and personal risk (decision for local advisors and users). 2 Entrapment and infiltration without a central moderator. 3 Gossip density and latency (untested in Tehran). 4 Battery of continuous BLE scanning on mid-range phones. 5 PSI performance and correctness on low-end devices. 6 Transfer of research (mostly Western student samples). 7 Compelled unlock: no technical feature defeats a phone opened while unlocked. Raised during planning, not in spec v1.0: 8 Familiar-stranger linking (spec 5.5) is unspecified: ephemeral IDs rotate every 10 to 15 minutes, so repeat encounters cannot be linked without some stable or semi-stable handle, which conflicts with unlinkability. 9 Tier 0 shows a shared-interest count before names, which needs a cardinality-first PSI variant; whether a maintained mobile library offers one is unknown. 10 Offline single-use invite enforcement: a photographed QR can be replayed unless the token is bound to the new install key.
+  CUT OR DEFERRED: streaks, daily-login rewards, variable-reward feeds, someone-liked-you teasers, fake activity counts (exposure risk from compulsive checking); global feed, public posting, mass broadcasting, advertising (non-goals); location history; any real-name or phone-number or contacts requirement; accounts, analytics, cloud backup (nothing to subpoena or leak); app-store dependence; gossip, Wi-Fi Aware/Direct, vouching (v1.5, gated on the pilot); UWB, LoRa, iOS (later).
