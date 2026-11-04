@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- app_label is generated from gradle.properties (koocheh.appLabel). -->
+    <string name="alias_label_primary">Tools</string>
+    <string name="alias_label_notes">Notes</string>
+    <string name="alias_label_calc">Calculator</string>
+
+    <string name="notification_channel_name">Background service</string>
+    <string name="notification_title">Running</string>
+    <string name="notification_text">Background task active</string>
+</resources>
