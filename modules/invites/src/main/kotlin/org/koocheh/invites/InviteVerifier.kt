@@ -7,12 +7,16 @@ import org.koocheh.model.ContextId
  * Order: version, signature, context, invitee key, expiry, then nonce single-use.
  * The nonce is consumed only when every other check passed.
  */
-class InviteVerifier(
+class InviteVerifier internal constructor(
     private val signer: InviteSigner,
-    expectedContext: ContextId,
+    private val expectedContextKey: String,
     private val usedLedger: NonceLedger = InMemoryNonceLedger(),
 ) {
-    private val expectedContextKey = contextKeyOf(expectedContext)
+    constructor(
+        signer: InviteSigner,
+        expectedContext: ContextId,
+        usedLedger: NonceLedger = InMemoryNonceLedger(),
+    ) : this(signer, contextKeyOf(expectedContext), usedLedger)
 
     fun verify(token: InviteToken, ownPublicKey: ByteArray, nowMs: Long): InviteResult {
         return try {

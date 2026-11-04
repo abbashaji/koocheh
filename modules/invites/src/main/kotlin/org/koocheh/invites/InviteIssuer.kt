@@ -14,7 +14,10 @@ class InviteIssuer(
     private val issuedLedger: NonceLedger = InMemoryNonceLedger(),
     private val random: SecureRandom = SecureRandom(),
 ) {
-    fun issue(context: ContextId, inviteePublicKey: ByteArray, nowMs: Long): InviteToken {
+    fun issue(context: ContextId, inviteePublicKey: ByteArray, nowMs: Long): InviteToken =
+        issueForKey(contextKeyOf(context), inviteePublicKey, nowMs)
+
+    internal fun issueForKey(contextKey: String, inviteePublicKey: ByteArray, nowMs: Long): InviteToken {
         var nonce = ByteArray(NONCE_BYTES)
         var attempts = 0
         while (true) {
@@ -25,7 +28,7 @@ class InviteIssuer(
         }
         val unsigned = InviteToken(
             version = INVITE_VERSION,
-            contextKey = contextKeyOf(context),
+            contextKey = contextKey,
             issuerPublicKey = issuerPublicKey.copyOf(),
             inviteePublicKey = inviteePublicKey.copyOf(),
             nonce = nonce,
