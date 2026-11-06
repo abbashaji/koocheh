@@ -21,8 +21,8 @@ android {
 }
 
 dependencies {
-    // Assumption: C-003 lives at :modules:model (org.koocheh.model.ContextId, Clock).
-    implementation(project(":modules:model"))
+    // C-003 lives at :modules:core-model (org.koocheh.model.ContextId, Clock).
+    implementation(project(":modules:core-model"))
     implementation(libs.zxing.core)
     implementation(libs.androidx.core.ktx)
 

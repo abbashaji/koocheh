@@ -4,11 +4,7 @@ plugins {
 }
 
 dependencies {
-    api(project(":modules:model"))
-    api(project(":modules:crypto"))
-    api(project(":modules:psi"))
-    api(project(":modules:storage"))
-    api(project(":modules:transport"))
+    api(project(":modules:core-model"))
     api("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
 

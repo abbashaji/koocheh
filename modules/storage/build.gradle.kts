@@ -1,5 +1,5 @@
 // Storage module: encrypted local store and key vault. No network code.
-// [UNVERIFIED] Module paths :modules:model and :modules:crypto and the kapt setup were not built here.
+// [UNVERIFIED] Module paths :modules:core-model and :modules:core-crypto and the kapt setup were not built here.
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
@@ -29,8 +29,8 @@ android {
 }
 
 dependencies {
-    api(project(":modules:model"))
-    api(project(":modules:crypto"))
+    api(project(":modules:core-model"))
+    api(project(":modules:core-crypto"))
 
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.room.runtime)
