@@ -187,7 +187,7 @@ internal class SessionImpl(
         return rounds.getOrPut(step) { CommitRevealRound(step, commitments) }
     }
 
-    private fun handlePsi(msg: PsiMsg) {
+    private suspend fun handlePsi(msg: PsiMsg) {
         val data = msg.data.unb64()
         when (msg.round) {
             0 -> {
@@ -205,7 +205,7 @@ internal class SessionImpl(
                 if (psi1Received) throw ProtocolViolation("repeated psi")
                 feed(s, data)
                 psi1Received = true
-                rounds[1]?.let { if (it.complete || it.bothCommitted) tryCompleteIfReady(1) }
+                completeStep(1)
             }
             else -> throw ProtocolViolation("unknown psi round")
         }
@@ -219,14 +219,10 @@ internal class SessionImpl(
         }
     }
 
-    private fun tryCompleteIfReady(step: Int) {
-        // PSI round 1 can arrive after the peer's reveal; finish step 1 if everything is in.
-        completeStep(step)
-    }
-
     private suspend fun tryComplete(step: Int) = completeStep(step)
 
-    private fun completeStep(step: Int) {
+    // Also called when PSI round 1 arrives after the peer's reveal.
+    private suspend fun completeStep(step: Int) {
         val round = rounds[step] ?: return
         if (!round.complete || completed >= step) return
         if (step == 1 && !psi1Received) return
@@ -252,12 +248,10 @@ internal class SessionImpl(
             4 -> if (value.isNotEmpty()) photo = PeerPhoto(value, blurred = false)
         }
         completed = step
-        pendingRecord = tier to value
+        store.putPeerRecord(peerKey, tier, value)
         publish(tier)
         round.clear()
     }
-
-    private var pendingRecord: Pair<DisclosureTier, ByteArray>? = null
 
     private fun publish(tier: DisclosureTier) {
         mutableState.value = TierState(tier, sharedCount, sharedTags, nickname, line, age, photo, false)
@@ -284,7 +278,6 @@ internal class SessionImpl(
         line = null
         age = null
         photo = null
-        pendingRecord = null
         completed = -1
         mutableState.value = TierState.withdrawn()
     }
