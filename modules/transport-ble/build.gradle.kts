@@ -24,7 +24,7 @@ android {
 
 dependencies {
     // Assumed module path for C-003 (org.koocheh.model).
-    implementation(project(":modules:model"))
+    implementation(project(":modules:core-model"))
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
     testImplementation(kotlin("test"))
