@@ -163,3 +163,129 @@ internal class SessionImpl(
         }
         tryComplete(step)
     }
+
+    private suspend fun handle(msg: WireMessage) {
+        when (msg) {
+            is PsiMsg -> handlePsi(msg)
+            is CommitMsg -> {
+                val round = roundFor(msg.step)
+                round.onPeerCommit(msg.commitment.unb64())
+                if (round.bothCommitted) afterBothCommitted(msg.step, round)
+            }
+            is RevealMsg -> {
+                val round = rounds[msg.step] ?: throw ProtocolViolation("unexpected reveal")
+                if (completed != msg.step - 1) throw ProtocolViolation("out of order")
+                round.onPeerReveal(msg.nonce.unb64(), msg.value.unb64())
+                tryComplete(msg.step)
+            }
+            is WithdrawMsg -> wipe(notify = false)
+        }
+    }
+
+    private fun roundFor(step: Int): CommitRevealRound {
+        if (step !in 1..4 || completed != step - 1) throw ProtocolViolation("out of order")
+        return rounds.getOrPut(step) { CommitRevealRound(step, commitments) }
+    }
+
+    private fun handlePsi(msg: PsiMsg) {
+        val data = msg.data.unb64()
+        when (msg.round) {
+            0 -> {
+                val s = psi0 ?: throw ProtocolViolation("unexpected psi")
+                if (completed >= 0) throw ProtocolViolation("repeated psi")
+                feed(s, data)
+                val r = s.result ?: throw ProtocolViolation("psi incomplete")
+                completed = 0
+                sharedCount = if (r.count >= local.threshold) r.count else null
+                publish(DisclosureTier.T0)
+                ready.complete(Unit)
+            }
+            1 -> {
+                val s = psi1 ?: throw ProtocolViolation("unexpected psi")
+                if (psi1Received) throw ProtocolViolation("repeated psi")
+                feed(s, data)
+                psi1Received = true
+                rounds[1]?.let { if (it.complete || it.bothCommitted) tryCompleteIfReady(1) }
+            }
+            else -> throw ProtocolViolation("unknown psi round")
+        }
+    }
+
+    private fun feed(s: PsiSession, data: ByteArray) {
+        try {
+            s.incoming(data)
+        } catch (e: Exception) {
+            throw ProtocolViolation("psi rejected")
+        }
+    }
+
+    private fun tryCompleteIfReady(step: Int) {
+        // PSI round 1 can arrive after the peer's reveal; finish step 1 if everything is in.
+        completeStep(step)
+    }
+
+    private suspend fun tryComplete(step: Int) = completeStep(step)
+
+    private fun completeStep(step: Int) {
+        val round = rounds[step] ?: return
+        if (!round.complete || completed >= step) return
+        if (step == 1 && !psi1Received) return
+        val value = round.peerValue ?: return
+        val tier = DisclosureTier.valueOf("T$step")
+        when (step) {
+            1 -> {
+                val r = psi1?.result ?: throw ProtocolViolation("psi incomplete")
+                sharedTags = r.sharedTags ?: throw ProtocolViolation("tags missing")
+                sharedCount = r.count
+                nickname = value.decodeToString()
+            }
+            2 -> {
+                val bio = try {
+                    json.decodeFromString(Bio.serializer(), value.decodeToString())
+                } catch (e: SerializationException) {
+                    throw ProtocolViolation("bad bio")
+                }
+                line = bio.line
+                age = ageCodec.decode(bio.age) ?: throw ProtocolViolation("bad age range")
+            }
+            3 -> photo = if (value.isEmpty()) null else PeerPhoto(value, blurred = true)
+            4 -> if (value.isNotEmpty()) photo = PeerPhoto(value, blurred = false)
+        }
+        completed = step
+        pendingRecord = tier to value
+        publish(tier)
+        round.clear()
+    }
+
+    private var pendingRecord: Pair<DisclosureTier, ByteArray>? = null
+
+    private fun publish(tier: DisclosureTier) {
+        mutableState.value = TierState(tier, sharedCount, sharedTags, nickname, line, age, photo, false)
+    }
+
+    private suspend fun wipe(notify: Boolean) {
+        wiped = true
+        withdrawal.withdraw(
+            notifyPeer = { if (notify) send(WithdrawMsg()) },
+            discardMemory = { discard() },
+        )
+        ready.completeExceptionally(IllegalStateException("session withdrawn"))
+        channel.close()
+    }
+
+    private fun discard() {
+        rounds.values.forEach { it.clear() }
+        rounds.clear()
+        psi0 = null
+        psi1 = null
+        sharedCount = null
+        sharedTags = null
+        nickname = null
+        line = null
+        age = null
+        photo = null
+        pendingRecord = null
+        completed = -1
+        mutableState.value = TierState.withdrawn()
+    }
+}
