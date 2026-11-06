@@ -197,7 +197,7 @@ internal class SessionImpl(
                 val r = s.result ?: throw ProtocolViolation("psi incomplete")
                 completed = 0
                 sharedCount = if (r.count >= local.threshold) r.count else null
-                publish(DisclosureTier.T0)
+                publish(DisclosureTier.T0_SIGNAL)
                 ready.complete(Unit)
             }
             1 -> {
@@ -227,7 +227,7 @@ internal class SessionImpl(
         if (!round.complete || completed >= step) return
         if (step == 1 && !psi1Received) return
         val value = round.peerValue ?: return
-        val tier = DisclosureTier.valueOf("T$step")
+        val tier = DisclosureTier.entries[step]
         when (step) {
             1 -> {
                 val r = psi1?.result ?: throw ProtocolViolation("psi incomplete")
