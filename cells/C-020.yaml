@@ -1,0 +1,39 @@
+id: C-020
+title: repair module project paths in build files
+type: integration
+after:
+  - C-006
+  - C-007
+  - C-008
+  - C-009
+  - C-011
+  - C-012
+  - C-018
+goal: |
+  Real module directories are modules/core-model, core-crypto, core-psi, storage, transport-ble, disclosure, familiar, security, invites, chat, pilot. Gradle projects are named by directory (settings.gradle.kts auto-includes them), so the names :modules:model, :modules:crypto, :modules:psi, :modules:transport do not exist and break configuration. Fix ONLY the dependency blocks and header comments of these build files; do not touch any source file.
+  - modules/disclosure/build.gradle.kts: keep kotlin("jvm") and serialization. Replace the five api(project(...)) lines by api(project(":modules:core-model")) only. The module codes against its own local ports (Commitments, PsiEngine, ContextStore, PeerChannel) and must NOT depend on Android library modules; C-021 adapts the real implementations in ServiceLocator. Keep coroutines, serialization and test dependencies.
+  - modules/familiar/build.gradle.kts: replace :modules:model by :modules:core-model, add implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1"); remove the UNVERIFIED comment about :modules:model.
+  - modules/chat/build.gradle.kts: ChatService imports org.koocheh.storage.ContextStore, which is an Android library, so chat becomes an Android library too: plugins id("com.android.library"), id("org.jetbrains.kotlin.android") and id("org.jetbrains.kotlin.plugin.serialization"), android { namespace = "org.koocheh.chat"; compileSdk = 34; minSdk = 26; Java/Kotlin 17; unitTests.isReturnDefaultValues = true }. Dependencies: core-model, core-crypto, storage, transport-ble (all as :modules:<dir>), coroutines-core 1.8.1, serialization-json 1.6.3, test: kotlin("test"), junit:junit:4.13.2. Remove tasks.test useJUnitPlatform.
+  - modules/storage/build.gradle.kts: replace :modules:model by :modules:core-model and :modules:crypto by :modules:core-crypto; update the UNVERIFIED comment.
+  - modules/transport-ble/build.gradle.kts: replace :modules:model by :modules:core-model.
+  - modules/invites/build.gradle.kts: replace :modules:model by :modules:core-model and fix the comment.
+  Keep every other line as it is.
+allowed_paths:
+  - modules/disclosure/build.gradle.kts
+  - modules/familiar/build.gradle.kts
+  - modules/chat/build.gradle.kts
+  - modules/storage/build.gradle.kts
+  - modules/transport-ble/build.gradle.kts
+  - modules/invites/build.gradle.kts
+inputs: []
+outputs:
+  - modules/disclosure/build.gradle.kts
+  - modules/familiar/build.gradle.kts
+  - modules/chat/build.gradle.kts
+  - modules/storage/build.gradle.kts
+  - modules/transport-ble/build.gradle.kts
+  - modules/invites/build.gradle.kts
+acceptance:
+  - cmd: sh -c '! grep -rqE ":modules:(model|crypto|psi|transport)\"" modules --include=build.gradle.kts'
+  - cmd: grep -q core-model modules/disclosure/build.gradle.kts
+  - cmd: grep -q com.android.library modules/chat/build.gradle.kts
