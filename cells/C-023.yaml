@@ -1,0 +1,83 @@
+id: C-023
+title: integration wiring and two-peer end-to-end tests (supersedes C-021)
+type: integration
+supersedes:
+  - C-021
+after:
+  - C-017
+  - C-018
+  - C-020
+  - C-022
+goal: |
+  Wire the real modules into the app and prove the pieces work together. Package org.koocheh. Cell C-021 already committed app/build.gradle.kts on branch cell/C-021 (project dependencies); redo it here if it is not on main.
+  - app/build.gradle.kts: project dependencies on :modules:core-model, :modules:core-crypto, :modules:core-psi, :modules:storage, :modules:transport-ble, :modules:disclosure, :modules:familiar, :modules:security, :modules:invites, :modules:chat, :modules:pilot, and apply ../gradle/reproducible.gradle.kts.
+  - ServiceLocator.kt: replace each NotWiredYet provider with the real implementation: KeyVault as ContextSecretSource for EphemeralIdProvider, DiscoveryService advertising the current id and re-advertising at nextRotationAtMs, DisclosureEngine over PeerLink channels with the PSI engine from core-psi, FamiliarTracker fed from completed Tier 0 matches, ChatService, PanicWipe. If no real PSI library has been chosen (see modules/core-psi/LIBRARY_EVALUATION.md), the locator must fail closed with a clear error in release builds and use FakePsiEngine only in debug and test builds.
+  - modules/disclosure and modules/familiar code against their own local ports (disclosure: modules/disclosure/src/main/kotlin/org/koocheh/disclosure/Ports.kt; familiar: EncounterStore port in modules/familiar). Write small private adapter classes in ServiceLocator.kt from the real types to those ports. Never edit module code.
+  - Real source locations (read interfaces and public constructors only, with line ranges): modules/transport-ble/src/main/kotlin/org/koocheh/transport/GattExchange.kt (PeerLink, PeerChannel, GattPeerLink), BleScanner.kt (DiscoveryService, BleDiscoveryService), core-crypto .../crypto/{Commitments,ContextSecretSource,EphemeralIds,SecureSession,Signer}.kt, core-psi .../psi/PsiEngine.kt, core-model .../model/{Clock,Context,Disclosure,Ids,Profile}.kt, storage .../storage/{ContextStore,KeyVault,SecureStore}.kt, security .../security/*.kt, chat .../chat/*.kt, pilot, invites. app/ServiceLocator.kt has a placeholder DiscoveryService interface at line 11 to replace with the real one. DisclosureTier is T0_SIGNAL, T1_HELLO, T2_BIO, T3_PHOTO, T4_CHAT; ContextId is WORK or SOCIAL.
+  - Tests (JVM, no devices): TwoPeerFlowTest runs two full stacks over an in-memory FakeRadioLink through Tiers 0 to 4, checking nothing is revealed one-sidedly and that withdrawal at each tier deletes the data; ContextIsolationTest checks Work and Social ids and stores share nothing; WipeAndDecoyTest checks the real PIN, decoy PIN and wipe PIN outcomes and that after wipe the stores are unreadable.
+  Fix interface mismatches by adapting in ServiceLocator, not by editing module code; if a contract is wrong, use cell_signal feedback with the exact two signatures that disagree.
+allowed_paths:
+  - app/build.gradle.kts
+  - app/src/main/kotlin/org/koocheh/ServiceLocator.kt
+  - app/src/test/kotlin/org/koocheh/integration/**
+inputs:
+  - from: C-004
+    kind: implementation
+    contract: |
+      org.koocheh.crypto EphemeralIdProvider, Commitments, Signer, SecureSessionFactory, SecureSession, ContextSecretSource.
+  - from: C-005
+    kind: implementation
+    contract: |
+      org.koocheh.psi PsiEngine, PsiSession, RevealLevel, FakePsiEngine in testFixtures.
+  - from: C-006
+    kind: implementation
+    contract: |
+      org.koocheh.storage KeyVault, UnlockResult, SecureStore, ContextStore.
+  - from: C-007
+    kind: implementation
+    contract: |
+      org.koocheh.transport DiscoveryService, PeerLink, PeerChannel.
+  - from: C-008
+    kind: implementation
+    contract: |
+      org.koocheh.disclosure DisclosureEngine, DisclosureSession, TierState.
+  - from: C-009
+    kind: implementation
+    contract: |
+      org.koocheh.familiar FamiliarTracker, EncounterLinker.
+  - from: C-010
+    kind: implementation
+    contract: |
+      org.koocheh.security DecoyGate, PanicWipe, SecureWindowPolicy, NotificationPolicy, PhotoSanitizer.
+  - from: C-011
+    kind: implementation
+    contract: |
+      org.koocheh.invites InviteIssuer, InviteVerifier, QrCodec.
+  - from: C-012
+    kind: implementation
+    contract: |
+      org.koocheh.chat ChatService.
+  - from: C-014
+    kind: implementation
+    contract: |
+      UI screens for onboarding, lock, profile and settings exist under org.koocheh.ui.
+  - from: C-015
+    kind: implementation
+    contract: |
+      UI screens for signals, disclosure, chat and AppNavHost exist under org.koocheh.ui.
+  - from: C-016
+    kind: implementation
+    contract: |
+      org.koocheh.pilot PilotRecorder, PilotExporter, ExperimentFlags.
+outputs:
+  - app/build.gradle.kts
+  - app/src/main/kotlin/org/koocheh/ServiceLocator.kt
+  - app/src/test/kotlin/org/koocheh/integration/FakeRadioLink.kt
+  - app/src/test/kotlin/org/koocheh/integration/TwoPeerFlowTest.kt
+  - app/src/test/kotlin/org/koocheh/integration/ContextIsolationTest.kt
+  - app/src/test/kotlin/org/koocheh/integration/WipeAndDecoyTest.kt
+acceptance:
+  - cmd: test -f app/src/test/kotlin/org/koocheh/integration/TwoPeerFlowTest.kt
+  - cmd: grep -q modules/disclosure app/build.gradle.kts
+  - cmd: grep -q reproducible app/build.gradle.kts
+  - cmd: sh -c '! grep -q NotWiredYet app/src/main/kotlin/org/koocheh/ServiceLocator.kt'

@@ -1,0 +1,26 @@
+id: C-022
+title: align disclosure module with the real DisclosureTier names
+type: integration
+after:
+  - C-008
+  - C-020
+goal: |
+  modules/core-model declares enum DisclosureTier { T0_SIGNAL, T1_HELLO, T2_BIO, T3_PHOTO, T4_CHAT } (modules/core-model/src/main/kotlin/org/koocheh/model/Disclosure.kt). modules/disclosure was written against constants named T0..T4 and does not compile. Fix ONLY these usages, no behaviour change:
+  - TierState.kt: DisclosureTier.T0 -> DisclosureTier.T0_SIGNAL (in initial() and withdrawn()).
+  - DisclosureEngine.kt: DisclosureTier.T0 -> DisclosureTier.T0_SIGNAL (publish call near line 200); replace DisclosureTier.valueOf("T$step") (near line 230) by DisclosureTier.entries[step] (entries order is T0_SIGNAL..T4_CHAT, step 0..4).
+  - src/test DisclosureEngineTest.kt: DisclosureTier.T0 -> T0_SIGNAL, T1 -> T1_HELLO, T2 -> T2_BIO, T3 -> T3_PHOTO, T4 -> T4_CHAT, and DisclosureTier.valueOf("T$t") -> DisclosureTier.entries[t]. Check Fakes.kt and CommitRevealTest.kt for the same names.
+  - Other model facts (verified): ContextId is enum { WORK, SOCIAL }; AgeRange is enum { R18_24, R25_34, R35_44, R45_PLUS }; InterestTag(raw: String) has val value. TestModel.kt builds these reflectively and should keep working; if it fails against enums or the InterestTag(String) constructor, replace its bodies with direct values (ContextId.WORK, AgeRange.R18_24, InterestTag("tag$i")).
+  - Comments mentioning T0..T4 as step labels may stay.
+  Do not change any other file. Do not change public signatures of DisclosureEngine, DisclosureSession or TierState.
+allowed_paths:
+  - modules/disclosure/src/**
+inputs: []
+outputs:
+  - modules/disclosure/src/main/kotlin/org/koocheh/disclosure/TierState.kt
+  - modules/disclosure/src/main/kotlin/org/koocheh/disclosure/DisclosureEngine.kt
+  - modules/disclosure/src/test/kotlin/org/koocheh/disclosure/DisclosureEngineTest.kt
+  - modules/disclosure/src/test/kotlin/org/koocheh/disclosure/TestModel.kt
+acceptance:
+  - cmd: grep -q T0_SIGNAL modules/disclosure/src/main/kotlin/org/koocheh/disclosure/TierState.kt
+  - cmd: sh -c '! grep -rqE "DisclosureTier\.T[0-4]([^_]|$)" modules/disclosure/src'
+  - cmd: sh -c '! grep -rq "valueOf(" modules/disclosure/src/main'
