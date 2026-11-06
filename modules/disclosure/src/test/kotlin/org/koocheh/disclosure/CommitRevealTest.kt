@@ -31,10 +31,11 @@ class CommitRevealTest {
     fun tamperedValueIsRejected() {
         val a = round()
         val b = round()
-        a.start("alice".encodeToByteArray())
+        val ca = a.start("alice".encodeToByteArray())
         val cb = b.start("bob".encodeToByteArray())
         a.onPeerCommit(cb)
-        val (nb, _) = b.run { onPeerCommit(a.let { cb }); takeReveal() }
+        b.onPeerCommit(ca)
+        val (nb, _) = b.takeReveal()
         assertFailsWith<TamperedCommitment> { a.onPeerReveal(nb, "eve".encodeToByteArray()) }
     }
 
