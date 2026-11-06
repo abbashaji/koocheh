@@ -57,14 +57,14 @@ class DisclosureEngineTest {
         if (target >= 1) {
             a.session.sayHello()
             b.session.sayHello()
-            a.reach(DisclosureTier.T1)
-            b.reach(DisclosureTier.T1)
+            a.reach(DisclosureTier.T1_HELLO)
+            b.reach(DisclosureTier.T1_HELLO)
         }
         for (t in 2..target) {
             a.session.confirmNext()
             b.session.confirmNext()
-            a.reach(DisclosureTier.valueOf("T$t"))
-            b.reach(DisclosureTier.valueOf("T$t"))
+            a.reach(DisclosureTier.entries[t])
+            b.reach(DisclosureTier.entries[t])
         }
     }
 
@@ -75,8 +75,8 @@ class DisclosureEngineTest {
 
         a.session.sayHello()
         b.session.sayHello()
-        val a1 = a.reach(DisclosureTier.T1)
-        val b1 = b.reach(DisclosureTier.T1)
+        val a1 = a.reach(DisclosureTier.T1_HELLO)
+        val b1 = b.reach(DisclosureTier.T1_HELLO)
         assertEquals(setOf(tags[1], tags[2]), a1.sharedTags)
         assertEquals(setOf(tags[1], tags[2]), b1.sharedTags)
         assertEquals("bob", a1.peerNickname)
@@ -85,22 +85,22 @@ class DisclosureEngineTest {
 
         a.session.confirmNext()
         b.session.confirmNext()
-        val a2 = a.reach(DisclosureTier.T2)
-        val b2 = b.reach(DisclosureTier.T2)
+        val a2 = a.reach(DisclosureTier.T2_BIO)
+        val b2 = b.reach(DisclosureTier.T2_BIO)
         assertEquals("line bob", a2.peerLine)
         assertEquals("line alice", b2.peerLine)
         assertEquals(age, a2.peerAgeRange)
 
         a.session.confirmNext()
         b.session.confirmNext()
-        val a3 = a.reach(DisclosureTier.T3)
-        b.reach(DisclosureTier.T3)
+        val a3 = a.reach(DisclosureTier.T3_PHOTO)
+        b.reach(DisclosureTier.T3_PHOTO)
         assertEquals(PeerPhoto("blur-bob".encodeToByteArray(), true), a3.peerPhoto)
 
         a.session.confirmNext()
         b.session.confirmNext()
-        val a4 = a.reach(DisclosureTier.T4)
-        val b4 = b.reach(DisclosureTier.T4)
+        val a4 = a.reach(DisclosureTier.T4_CHAT)
+        val b4 = b.reach(DisclosureTier.T4_CHAT)
         assertEquals(PeerPhoto(clearB, false), a4.peerPhoto)
         assertEquals(PeerPhoto("blur-alice".encodeToByteArray(), true), b4.peerPhoto)
         assertFalse(a.store.isEmpty())
@@ -113,11 +113,11 @@ class DisclosureEngineTest {
         a.session.sayHello()
         delay(300)
         val bs = b.session.state.value
-        assertEquals(DisclosureTier.T0, bs.tier)
+        assertEquals(DisclosureTier.T0_SIGNAL, bs.tier)
         assertNull(bs.peerNickname)
         assertNull(bs.sharedTags)
         val asv = a.session.state.value
-        assertEquals(DisclosureTier.T0, asv.tier)
+        assertEquals(DisclosureTier.T0_SIGNAL, asv.tier)
         assertNull(asv.peerNickname)
         assertNull(asv.sharedTags)
         assertTrue(a.store.isEmpty() && b.store.isEmpty())

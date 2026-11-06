@@ -27,7 +27,7 @@ data class TierState(
     override fun toString(): String = "TierState(tier=$tier, withdrawn=$withdrawn)"
 
     companion object {
-        fun initial(): TierState = TierState(DisclosureTier.T0)
-        fun withdrawn(): TierState = TierState(DisclosureTier.T0, withdrawn = true)
+        fun initial(): TierState = TierState(DisclosureTier.T0_SIGNAL)
+        fun withdrawn(): TierState = TierState(DisclosureTier.T0_SIGNAL, withdrawn = true)
     }
 }
