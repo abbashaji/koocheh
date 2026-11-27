@@ -32,6 +32,7 @@ android {
     buildFeatures {
         compose = true
         resValues = true
+        buildConfig = true
     }
 
     compileOptions {
@@ -48,11 +49,32 @@ android {
 }
 
 dependencies {
+    // Real modules wired in ServiceLocator.kt: modules/core-model, modules/core-crypto, modules/core-psi,
+    // modules/storage, modules/transport-ble, modules/disclosure, modules/familiar, modules/security,
+    // modules/invites, modules/chat, modules/pilot.
     implementation(project(":modules:core-model"))
+    implementation(project(":modules:core-crypto"))
+    implementation(project(":modules:core-psi"))
+    implementation(project(":modules:storage"))
+    implementation(project(":modules:transport-ble"))
+    implementation(project(":modules:disclosure"))
+    implementation(project(":modules:familiar"))
+    implementation(project(":modules:security"))
+    implementation(project(":modules:invites"))
+    implementation(project(":modules:chat"))
+    implementation(project(":modules:pilot"))
 
     implementation(platform("androidx.compose:compose-bom:2024.06.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.activity:activity-compose:1.9.0")
     implementation("androidx.core:core-ktx:1.13.1")
+
+    // FakePsiEngine is insecure: debug builds only. Release has no PSI engine until a library is chosen.
+    debugImplementation(testFixtures(project(":modules:core-psi")))
+    testImplementation(testFixtures(project(":modules:core-psi")))
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
 }
+
+apply(from = "../gradle/reproducible.gradle.kts")
