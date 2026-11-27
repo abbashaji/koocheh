@@ -49,6 +49,9 @@ android {
 }
 
 dependencies {
+    // Real modules wired in ServiceLocator.kt: modules/core-model, modules/core-crypto, modules/core-psi,
+    // modules/storage, modules/transport-ble, modules/disclosure, modules/familiar, modules/security,
+    // modules/invites, modules/chat, modules/pilot.
     implementation(project(":modules:core-model"))
     implementation(project(":modules:core-crypto"))
     implementation(project(":modules:core-psi"))
