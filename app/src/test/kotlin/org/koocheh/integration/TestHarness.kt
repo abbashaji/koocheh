@@ -93,15 +93,14 @@ class VaultHarness {
     }
 }
 
-/** One phone: its own vault, stores and wiring, over a shared clock. */
-class Peer(
+internal class Peer(
     val clock: Clock,
     scope: CoroutineScope,
     val nickname: String,
     tags: Set<String>,
 ) {
     val harness = VaultHarness().also { it.unlockReal() }
-    val stack = AppStack(harness.vault, harness::storeFor, TestPsiEngine(), JdkCryptoBackend(), clock, scope)
+    val stack = AppStack(harness.vault, { ctx -> harness.stores.memory(ctx) }, TestPsiEngine(), JdkCryptoBackend(), clock, scope)
     private val local = LocalDisclosure(
         tags = tags.map(::InterestTag).toSet(),
         threshold = 1,
@@ -118,12 +117,10 @@ class Peer(
     fun store(context: ContextId = ContextId.WORK): InMemoryContextStore = harness.stores.memory(context)
 }
 
-private fun VaultHarness.storeFor(context: ContextId): InMemoryContextStore = stores.memory(context)
-
-class Sessions(val a: DisclosureSession, val b: DisclosureSession)
+internal class Sessions(val a: DisclosureSession, val b: DisclosureSession)
 
 /** Two phones that meet over a fake radio. Ava and Bo share the tags coffee and chess. */
-class Duo(
+internal class Duo(
     scope: CoroutineScope,
     tagsA: Set<String> = setOf("coffee", "chess", "rust"),
     tagsB: Set<String> = setOf("coffee", "chess", "jazz"),
@@ -150,7 +147,7 @@ class Duo(
 
 /** Both sides confirm each step from hello up to [upTo] (1 = T1 ... 4 = T4); assumes both are at T0. */
 @OptIn(ExperimentalCoroutinesApi::class)
-suspend fun TestScope.advanceBoth(s: Sessions, upTo: Int) {
+internal suspend fun TestScope.advanceBoth(s: Sessions, upTo: Int) {
     if (upTo >= 1) {
         s.a.sayHello()
         s.b.sayHello()
