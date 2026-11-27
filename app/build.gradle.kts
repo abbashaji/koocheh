@@ -32,6 +32,7 @@ android {
     buildFeatures {
         compose = true
         resValues = true
+        buildConfig = true
     }
 
     compileOptions {
@@ -66,6 +67,8 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.9.0")
     implementation("androidx.core:core-ktx:1.13.1")
 
+    // FakePsiEngine is insecure: debug builds only. Release has no PSI engine until a library is chosen.
+    debugImplementation(testFixtures(project(":modules:core-psi")))
     testImplementation(testFixtures(project(":modules:core-psi")))
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
