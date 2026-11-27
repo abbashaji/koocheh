@@ -133,3 +133,136 @@ internal object EnumAgeRangeCodec : AgeRangeCodec {
     override fun encode(range: AgeRange): String = range.name
     override fun decode(text: String): AgeRange? = AgeRange.entries.firstOrNull { it.name == text }
 }
+
+private const val DAY_MS = 86_400_000L
+
+internal fun epochDay(nowMs: Long): Int = Math.floorDiv(nowMs, DAY_MS).toInt()
+
+/**
+ * Feeds FamiliarTracker from Tier 1 shared tags. T0 is COUNT_ONLY, so sharedTags is null there and
+ * nothing is recorded. The first state with sharedTags != null and withdrawn == false (after mutual
+ * hello) records exactly one encounter for the session. A session that withdraws first records nothing.
+ */
+internal class FamiliarFeed(
+    private val linker: EncounterLinker,
+    private val clock: Clock,
+    private val scope: CoroutineScope,
+) {
+    fun attach(context: ContextId, tracker: FamiliarTracker, session: DisclosureSession): Job = scope.launch {
+        val seen = session.state.first { it.withdrawn || it.sharedTags != null }
+        val tags = seen.sharedTags
+        if (seen.withdrawn || tags == null) return@launch
+        val day = epochDay(clock.nowMs())
+        try {
+            tracker.record(context, linker.linkKey(context, tags, day), day)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Locked vault or store failure: skip this encounter. Link keys and tags are never logged.
+        }
+    }
+}
+
+/**
+ * HmacEncounterLinker keyed from the vault. KeyVault cannot store an arbitrary secret, so the key is
+ * derived on demand from the context's vault secret (HMAC with a fixed label) and is never persisted
+ * or logged. It is stable across restarts, which a random in-memory secret would not be.
+ */
+internal class ContextSecretLinker(private val secrets: ContextSecretSource) : EncounterLinker {
+    override fun linkKey(context: ContextId, sharedTags: Set<InterestTag>, day: Int): ByteArray {
+        val root = secrets.secret(context)
+        val secret = try {
+            Mac.getInstance("HmacSHA256").run {
+                init(SecretKeySpec(root, "HmacSHA256"))
+                doFinal(LINK_LABEL)
+            }
+        } finally {
+            root.fill(0)
+        }
+        try {
+            return HmacEncounterLinker(secret).linkKey(context, sharedTags, day)
+        } finally {
+            secret.fill(0)
+        }
+    }
+
+    private companion object {
+        val LINK_LABEL = "koocheh/familiar-link/v1".toByteArray(Charsets.UTF_8)
+    }
+}
+
+/** Seals chat records at rest with a key derived from the context's vault secret. */
+internal class VaultMessageSealer(
+    private val secrets: ContextSecretSource,
+    private val backend: CryptoBackend,
+    private val context: ContextId,
+) : MessageSealer {
+    override fun seal(plain: ByteArray): ByteArray {
+        val key = key()
+        try {
+            val nonce = backend.randomBytes(NONCE_BYTES)
+            return nonce + backend.aeadEncrypt(key, nonce, plain, AD)
+        } finally {
+            key.fill(0)
+        }
+    }
+
+    override fun open(sealed: ByteArray): ByteArray {
+        require(sealed.size > NONCE_BYTES) { "sealed record too short" }
+        val key = key()
+        try {
+            val nonce = sealed.copyOfRange(0, NONCE_BYTES)
+            val body = sealed.copyOfRange(NONCE_BYTES, sealed.size)
+            return backend.aeadDecrypt(key, nonce, body, AD)
+                ?: throw IllegalArgumentException("sealed record not authentic")
+        } finally {
+            key.fill(0)
+        }
+    }
+
+    private fun key(): ByteArray {
+        val root = secrets.secret(context)
+        try {
+            return backend.hmacSha256(root, KEY_LABEL)
+        } finally {
+            root.fill(0)
+        }
+    }
+
+    private companion object {
+        const val NONCE_BYTES = 24
+        val KEY_LABEL = "koocheh/chat-seal/v1".toByteArray(Charsets.UTF_8)
+        val AD = "koocheh/chat-record/v1".toByteArray(Charsets.UTF_8)
+    }
+}
+
+/**
+ * Advertises the current id of each context (one slot per context) and re-advertises at the first
+ * rotation instant after now. If the vault is locked the loop retries; nothing is advertised then.
+ */
+internal class AdvertisedIdRotator(
+    private val ids: EphemeralIdProvider,
+    private val advertise: (slot: Int, id: EphemeralId) -> Unit,
+    private val contexts: List<ContextId>,
+    private val clock: Clock,
+    private val scope: CoroutineScope,
+) {
+    fun start(): Job = scope.launch {
+        while (isActive) {
+            val wait = try {
+                val now = clock.nowMs()
+                contexts.forEachIndexed { slot, c -> advertise(slot, ids.current(c, now)) }
+                contexts.minOf { ids.nextRotationAtMs(it, now) } - now
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                RETRY_MS
+            }
+            delay(wait.coerceAtLeast(1L))
+        }
+    }
+
+    private companion object {
+        const val RETRY_MS = 5_000L
+    }
+}
