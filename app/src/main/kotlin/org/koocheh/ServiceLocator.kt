@@ -352,3 +352,98 @@ fun localDisclosure(profile: Profile, threshold: Int = 1, blurredPhoto: ByteArra
         blurredPhoto = blurredPhoto,
         clearPhoto = profile.photo,
     )
+
+object ServiceLocator {
+    @Volatile
+    private var appContext: Context? = null
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    @Volatile
+    private var advertising: Job? = null
+
+    /** Set when a real PSI library has been chosen; otherwise see [resolvePsiEngine]. */
+    @Volatile
+    var realPsiEngineFactory: (() -> PsiEngine)? = null
+
+    @Volatile
+    var debugBuild: Boolean = BuildConfig.DEBUG
+
+    fun init(context: Context) {
+        appContext = context.applicationContext
+    }
+
+    fun context(): Context = appContext ?: throw ServiceUnavailable("Context")
+
+    val keyVault: KeyVault by lazy {
+        val ctx = context()
+        KeyVault(
+            SodiumPinKdf(),
+            KeystoreMasterKeyWrapper(),
+            FileVaultStorage(File(ctx.noBackupFilesDir, "vault.bin")),
+        ) { SecureStore.deleteAllFiles(ctx) }.also { v ->
+            v.addLockListener {
+                advertising?.cancel()
+                advertising = null
+            }
+        }
+    }
+
+    val secureStore: SecureStore by lazy { SecureStore(context(), keyVault) }
+
+    private val stack: AppStack by lazy {
+        val psi = resolvePsiEngine(realPsiEngineFactory, debugBuild)
+        AppStack(keyVault, { secureStore.forContext(it) }, psi, LazySodiumBackend(), SystemClock, appScope)
+            .also { s -> keyVault.addLockListener { s.reset() } }
+    }
+
+    private val bluetoothAdapter: BluetoothAdapter by lazy {
+        context().getSystemService(BluetoothManager::class.java)?.adapter ?: throw ServiceUnavailable("Bluetooth")
+    }
+    private val peerDirectory = PeerDirectory()
+    private val bleDiscovery: BleDiscoveryService by lazy {
+        BleDiscoveryService(bluetoothAdapter, appScope, peerDirectory)
+    }
+
+    val discoveryService: DiscoveryService get() = bleDiscovery
+
+    val peerLink: PeerLink by lazy { GattPeerLink(context(), peerDirectory, RadioCapabilities(bluetoothAdapter)) }
+
+    /** Advertises the current id of each context and re-advertises at every rotation instant. */
+    fun startAdvertising(contexts: List<ContextId> = ContextId.entries) {
+        advertising?.cancel()
+        advertising = AdvertisedIdRotator(
+            stack.ids, { slot, id -> bleDiscovery.setAdvertisedId(slot, id) }, contexts, SystemClock, appScope,
+        ).start()
+    }
+
+    // Stores, trackers and chats belong to one context each, so they are asked for per context.
+    fun disclosureEngine(context: ContextId, local: LocalDisclosure): DisclosureEngine =
+        stack.disclosureEngine(context, local)
+
+    fun familiarTracker(context: ContextId): FamiliarTracker = stack.familiar(context)
+
+    fun chatService(context: ContextId): ChatService = stack.chat(context)
+
+    suspend fun openSession(sighting: Sighting, context: ContextId, local: LocalDisclosure): DisclosureSession =
+        stack.openSession(peerLink, sighting, context, local)
+
+    val panicWipe: PanicWipe by lazy {
+        val ctx = context()
+        val real = RealPanicWipe(
+            keyVault,
+            { discoveryService.stop() },
+            { ctx.getSystemService(NotificationManager::class.java)?.cancelAll() },
+            { finishTasks(ctx) },
+            { finishTasks(ctx) },
+        )
+        object : PanicWipe {
+            override fun wipe() {
+                appScope.launch { real.execute() }
+            }
+        }
+    }
+
+    private fun finishTasks(ctx: Context) {
+        ctx.getSystemService(ActivityManager::class.java)?.appTasks?.forEach { it.finishAndRemoveTask() }
+    }
+}
