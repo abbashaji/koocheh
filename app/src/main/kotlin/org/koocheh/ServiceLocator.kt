@@ -266,3 +266,89 @@ internal class AdvertisedIdRotator(
         const val RETRY_MS = 5_000L
     }
 }
+
+/**
+ * The wiring of the real modules, free of Android types so JVM tests can build whole stacks with fakes.
+ * Everything that holds state for a context is kept per context; [reset] drops it when the vault locks.
+ */
+internal class AppStack(
+    private val secrets: ContextSecretSource,
+    private val storeFor: (ContextId) -> ContextStore,
+    psi: PsiEngine,
+    private val backend: CryptoBackend,
+    private val clock: Clock,
+    private val scope: CoroutineScope,
+) {
+    val ids: EphemeralIdProvider = HkdfEphemeralIdProvider(secrets, backend)
+    val linker: EncounterLinker = ContextSecretLinker(secrets)
+    private val commitments = CommitmentsAdapter(CryptoCommitments(backend))
+    private val psiPort = PsiEngineAdapter(psi)
+    private val feed = FamiliarFeed(linker, clock, scope)
+    private val trackers = ConcurrentHashMap<ContextId, FamiliarTracker>()
+    private val chats = ConcurrentHashMap<ContextId, ChatService>()
+
+    fun disclosureEngine(context: ContextId, local: LocalDisclosure): DisclosureEngine =
+        DisclosureEngine(
+            commitments, psiPort, DisclosureStoreAdapter(storeFor(context)), local, EnumAgeRangeCodec, scope,
+        )
+
+    fun familiar(context: ContextId): FamiliarTracker =
+        trackers.getOrPut(context) { FamiliarTracker(EncounterStoreAdapter(storeFor(context))) }
+
+    fun chat(context: ContextId): ChatService = chats.getOrPut(context) {
+        org.koocheh.chat.ChatService.create(storeFor(context), VaultMessageSealer(secrets, backend, context), clock)
+    }
+
+    /** Opens a link to a sighted peer and runs the disclosure tiers over it. */
+    suspend fun openSession(
+        link: PeerLink,
+        sighting: Sighting,
+        context: ContextId,
+        local: LocalDisclosure,
+    ): DisclosureSession {
+        val channel = ChannelAdapter(link.open(sighting))
+        val session = disclosureEngine(context, local).open(channel, context)
+        feed.attach(context, familiar(context), session)
+        return session
+    }
+
+    fun reset() {
+        trackers.clear()
+        chats.clear()
+    }
+}
+
+/**
+ * Fails closed: without a chosen PSI library (see modules/core-psi/LIBRARY_EVALUATION.md) a release
+ * build refuses to start disclosure. Only debug builds may use the insecure FakePsiEngine.
+ */
+internal fun resolvePsiEngine(
+    real: (() -> PsiEngine)?,
+    debugBuild: Boolean,
+    loadFake: () -> PsiEngine = ::loadFakePsiEngine,
+): PsiEngine {
+    real?.let { return it() }
+    check(debugBuild) {
+        "No private set intersection library has been chosen (see modules/core-psi/LIBRARY_EVALUATION.md); " +
+            "refusing to run disclosure in a release build."
+    }
+    return loadFake()
+}
+
+private fun loadFakePsiEngine(): PsiEngine = try {
+    Class.forName("org.koocheh.psi.FakePsiEngine").getDeclaredConstructor().newInstance() as PsiEngine
+} catch (e: ReflectiveOperationException) {
+    throw IllegalStateException("FakePsiEngine is not available in this build", e)
+}
+
+/** What the local user discloses in a context; the photo is sent clear only at Tier 4. */
+fun localDisclosure(profile: Profile, threshold: Int = 1, blurredPhoto: ByteArray? = null): LocalDisclosure =
+    LocalDisclosure(
+        tags = profile.tags.toSet(),
+        threshold = threshold,
+        nickname = profile.nickname,
+        line = profile.line,
+        ageRange = profile.ageRange,
+        blurredPhoto = blurredPhoto,
+        clearPhoto = profile.photo,
+    )
